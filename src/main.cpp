@@ -16,10 +16,10 @@ static bms_interface_t* bms_interface = NULL;
 
 // Function to detect BMS type (placeholder implementation)
 static bool auto_detect_bms_type() {
-    // For now, we'll default to Daly BMS
+    // For now, we'll default to JBD BMS
     // In a real implementation, this would send detection commands
     // and analyze responses to determine BMS type
-    return true; // Assume Daly BMS for now
+    return false; // Assume JBD BMS for now
 }
 
 extern "C" void app_main(void)

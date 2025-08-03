@@ -12,8 +12,8 @@ extern "C" {
 
 // Daly BMS specific definitions
 #define DALY_BMS_UART_PORT UART_NUM_1
-#define DALY_BMS_RX_PIN 26
-#define DALY_BMS_TX_PIN 27
+#define DALY_BMS_RX_PIN 16
+#define DALY_BMS_TX_PIN 17
 #define DALY_BMS_BAUD_RATE 9600
 #define DALY_XFER_BUFFER_LENGTH 13
 #define DALY_MAX_NUMBER_CELLS 48

@@ -11,7 +11,7 @@ extern "C" {
 #include "bms_interface.h"
 
 // JBD BMS specific definitions
-#define JBD_BMS_UART_PORT UART_NUM_2
+#define JBD_BMS_UART_PORT UART_NUM_1
 #define JBD_BMS_RX_PIN 16
 #define JBD_BMS_TX_PIN 17
 #define JBD_BMS_BAUD_RATE 9600
