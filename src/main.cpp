@@ -56,6 +56,7 @@ extern "C" void app_main(void)
             int cell_count = bms_interface->getCellCount(bms_interface->handle);
             float min_cell_voltage = bms_interface->getMinCellVoltage(bms_interface->handle);
             float max_cell_voltage = bms_interface->getMaxCellVoltage(bms_interface->handle);
+            float cell_voltage_delta = bms_interface->getCellVoltageDelta(bms_interface->handle);
             int min_cell_num = bms_interface->getMinCellNumber(bms_interface->handle);
             int max_cell_num = bms_interface->getMaxCellNumber(bms_interface->handle);
 
@@ -83,6 +84,7 @@ extern "C" void app_main(void)
             printf("Cell Count: %d\n", cell_count);
             printf("Cell Voltage Range: %.3f V (Cell %d) - %.3f V (Cell %d)\n",
                    min_cell_voltage, min_cell_num, max_cell_voltage, max_cell_num);
+            printf("Cell Voltage Delta: %.3f V\n", cell_voltage_delta);
             printf("Temperature Count: %d\n", temp_count);
             printf("Temperature Range: %.1f°C - %.1f°C\n", min_temp, max_temp);
             printf("Charging Enabled: %s\n", charging_enabled ? "YES" : "NO");

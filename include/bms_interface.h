@@ -27,6 +27,7 @@ typedef struct {
     float peakPower;
     bool chargingEnabled;
     bool dischargingEnabled;
+    float cellVoltageDelta;  // Cell voltage difference (max - min)
 } bms_data_t;
 
 // BMS Interface function pointer types
@@ -49,6 +50,7 @@ typedef float (*bms_get_peak_current_func_t)(void* bms_handle);
 typedef float (*bms_get_peak_power_func_t)(void* bms_handle);
 typedef bool (*bms_is_charging_enabled_func_t)(void* bms_handle);
 typedef bool (*bms_is_discharging_enabled_func_t)(void* bms_handle);
+typedef float (*bms_get_cell_voltage_delta_func_t)(void* bms_handle);
 
 // BMS Interface structure
 typedef struct {
@@ -72,6 +74,7 @@ typedef struct {
     bms_get_peak_power_func_t getPeakPower;
     bms_is_charging_enabled_func_t isChargingEnabled;
     bms_is_discharging_enabled_func_t isDischargingEnabled;
+    bms_get_cell_voltage_delta_func_t getCellVoltageDelta;
 } bms_interface_t;
 
 // BMS type enumeration

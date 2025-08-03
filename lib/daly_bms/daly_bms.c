@@ -112,6 +112,11 @@ static bool daly_bms_is_discharging_enabled(void* bms_handle) {
     return handle->data.disChargeFetState;
 }
 
+static float daly_bms_get_cell_voltage_delta(void* bms_handle) {
+    daly_bms_handle_t* handle = (daly_bms_handle_t*)bms_handle;
+    return handle->data.cellDiff / 1000.0f; // Convert mV to V
+}
+
 // Create Daly BMS interface
 bms_interface_t* daly_bms_create(uart_port_t uart_port, int rx_pin, int tx_pin) {
     daly_bms_handle_t* handle = calloc(1, sizeof(daly_bms_handle_t));
@@ -189,6 +194,7 @@ bms_interface_t* daly_bms_create(uart_port_t uart_port, int rx_pin, int tx_pin) 
     interface->getPeakPower = daly_bms_get_peak_power;
     interface->isChargingEnabled = daly_bms_is_charging_enabled;
     interface->isDischargingEnabled = daly_bms_is_discharging_enabled;
+    interface->getCellVoltageDelta = daly_bms_get_cell_voltage_delta;
 
     ESP_LOGI(TAG, "Daly BMS interface created successfully");
     return interface;

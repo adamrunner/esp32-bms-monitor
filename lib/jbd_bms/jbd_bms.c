@@ -117,6 +117,11 @@ static bool jbd_bms_is_discharging_enabled(void* bms_handle) {
     return handle->data.dischargingEnabled;
 }
 
+static float jbd_bms_get_cell_voltage_delta(void* bms_handle) {
+    jbd_bms_handle_t* handle = (jbd_bms_handle_t*)bms_handle;
+    return handle->data.maxCellVoltage - handle->data.minCellVoltage;
+}
+
 // Create JBD BMS interface
 bms_interface_t* jbd_bms_create(uart_port_t uart_port, int rx_pin, int tx_pin) {
     jbd_bms_handle_t* handle = calloc(1, sizeof(jbd_bms_handle_t));
@@ -194,6 +199,7 @@ bms_interface_t* jbd_bms_create(uart_port_t uart_port, int rx_pin, int tx_pin) {
     interface->getPeakPower = jbd_bms_get_peak_power;
     interface->isChargingEnabled = jbd_bms_is_charging_enabled;
     interface->isDischargingEnabled = jbd_bms_is_discharging_enabled;
+    interface->getCellVoltageDelta = jbd_bms_get_cell_voltage_delta;
 
     ESP_LOGI(TAG, "JBD BMS interface created successfully");
     return interface;
