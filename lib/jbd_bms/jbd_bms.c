@@ -370,11 +370,22 @@ static void jbd_parse_hwinfo(jbd_bms_handle_t* handle, uint8_t* data, int len) {
     handle->data.cellCount = data[21];
     handle->data.temperatureCount = data[22];
 
-    // Parse temperatures
+    // Parse temperatures and track min/max
+    handle->data.minTemperature = 1000.0f;  // Start with high value
+    handle->data.maxTemperature = -1000.0f; // Start with low value
+
     for (int i = 0; i < handle->data.temperatureCount && i < JBD_MAX_TEMP_SENSORS; i++) {
         if (23 + (i * 2) + 1 < len) {
             int16_t temp_raw = _getshort(&data[23 + (i * 2)]);
             handle->data.temperatures[i] = (float)(temp_raw - 2731) / 10.0f;
+
+            // Track min/max temperatures
+            if (handle->data.temperatures[i] < handle->data.minTemperature) {
+                handle->data.minTemperature = handle->data.temperatures[i];
+            }
+            if (handle->data.temperatures[i] > handle->data.maxTemperature) {
+                handle->data.maxTemperature = handle->data.temperatures[i];
+            }
         }
     }
 }
