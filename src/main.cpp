@@ -27,12 +27,13 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "Starting BMS Monitor Application");
 
     // Auto-detect BMS type
+    // Assume 16/17 are the RX/TX pins for UART communication
     if (auto_detect_bms_type()) {
         ESP_LOGI(TAG, "Daly BMS detected, initializing...");
-        bms_interface = daly_bms_create(UART_NUM_1, 26, 27);
+        bms_interface = daly_bms_create(UART_NUM_1, 16, 17);
     } else {
         ESP_LOGI(TAG, "JBD BMS detected, initializing...");
-        bms_interface = jbd_bms_create(UART_NUM_1, 16, 17); // Use same UART port for now
+        bms_interface = jbd_bms_create(UART_NUM_1, 16, 17);
     }
 
     if (!bms_interface) {
@@ -51,6 +52,7 @@ extern "C" void app_main(void)
             float current = bms_interface->getPackCurrent(bms_interface->handle);
             float soc = bms_interface->getStateOfCharge(bms_interface->handle);
             float power = bms_interface->getPower(bms_interface->handle);
+            float full_capacity = bms_interface->getFullCapacity(bms_interface->handle);
 
             // Get cell information
             int cell_count = bms_interface->getCellCount(bms_interface->handle);
@@ -79,6 +81,9 @@ extern "C" void app_main(void)
             printf("Pack Current: %.2f A\n", current);
             printf("State of Charge: %.1f%%\n", soc);
             printf("Power: %.2f W\n", power);
+            if (full_capacity > 0) {
+                printf("Full Capacity: %.2f Ah\n", full_capacity);
+            }
             printf("Peak Current: %.2f A\n", peak_current);
             printf("Peak Power: %.2f W\n", peak_power);
             printf("Cell Count: %d\n", cell_count);

@@ -36,6 +36,7 @@ typedef float (*bms_get_pack_voltage_func_t)(void* bms_handle);
 typedef float (*bms_get_pack_current_func_t)(void* bms_handle);
 typedef float (*bms_get_soc_func_t)(void* bms_handle);
 typedef float (*bms_get_power_func_t)(void* bms_handle);
+typedef float (*bms_get_full_capacity_func_t)(void* bms_handle);
 typedef int (*bms_get_cell_count_func_t)(void* bms_handle);
 typedef float (*bms_get_cell_voltage_func_t)(void* bms_handle, int cell);
 typedef float (*bms_get_min_cell_voltage_func_t)(void* bms_handle);
@@ -60,6 +61,7 @@ typedef struct {
     bms_get_pack_current_func_t getPackCurrent;
     bms_get_soc_func_t getStateOfCharge;
     bms_get_power_func_t getPower;
+    bms_get_full_capacity_func_t getFullCapacity;
     bms_get_cell_count_func_t getCellCount;
     bms_get_cell_voltage_func_t getCellVoltage;
     bms_get_min_cell_voltage_func_t getMinCellVoltage;

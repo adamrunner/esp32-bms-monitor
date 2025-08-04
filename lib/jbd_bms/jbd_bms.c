@@ -41,6 +41,11 @@ static float jbd_bms_get_power(void* bms_handle) {
     return handle->data.power;
 }
 
+static float jbd_bms_get_full_capacity(void* bms_handle) {
+    jbd_bms_handle_t* handle = (jbd_bms_handle_t*)bms_handle;
+    return handle->data.fullCapacity;
+}
+
 static int jbd_bms_get_cell_count(void* bms_handle) {
     jbd_bms_handle_t* handle = (jbd_bms_handle_t*)bms_handle;
     return handle->data.cellCount;
@@ -185,6 +190,7 @@ bms_interface_t* jbd_bms_create(uart_port_t uart_port, int rx_pin, int tx_pin) {
     interface->getPackCurrent = jbd_bms_get_pack_current;
     interface->getStateOfCharge = jbd_bms_get_soc;
     interface->getPower = jbd_bms_get_power;
+    interface->getFullCapacity = jbd_bms_get_full_capacity;
     interface->getCellCount = jbd_bms_get_cell_count;
     interface->getCellVoltage = jbd_bms_get_cell_voltage;
     interface->getMinCellVoltage = jbd_bms_get_min_cell_voltage;
@@ -350,10 +356,12 @@ static void jbd_parse_hwinfo(jbd_bms_handle_t* handle, uint8_t* data, int len) {
 
     handle->data.packVoltage = (float)_getushort(&data[0]) / 100.0f;
     handle->data.packCurrent = (float)_getshort(&data[2]) / 100.0f;
-    handle->data.capacity = (float)_getushort(&data[6]) / 100.0f;
+    handle->data.capacity = (float)_getushort(&data[4]) / 100.0f;
+    handle->data.fullCapacity = (float)_getushort(&data[6]) / 100.0f;
+    handle->data.pctCapacity = data[19];
 
-    // Calculate SOC based on capacity (this might need adjustment based on full capacity)
-    handle->data.packSOC = handle->data.capacity; // Placeholder - needs actual full capacity reference
+    // Use the direct percentage from BMS as SOC
+    handle->data.packSOC = (float)handle->data.pctCapacity;
 
     // Calculate power
     handle->data.power = handle->data.packVoltage * handle->data.packCurrent;

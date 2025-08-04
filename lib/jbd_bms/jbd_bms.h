@@ -52,9 +52,11 @@ typedef struct {
 typedef struct {
     float packVoltage;
     float packCurrent;
-    float packSOC;          // Will be calculated from capacity
+    float packSOC;          // State of Charge (0-100%)
     float power;
-    float capacity;         // Residual capacity
+    float capacity;         // Residual capacity (Ah)
+    float fullCapacity;     // Full charge capacity (Ah)
+    uint8_t pctCapacity;    // Percentage capacity (0-100)
     int cellCount;
     float cellVoltages[JBD_MAX_CELLS];
     int temperatureCount;

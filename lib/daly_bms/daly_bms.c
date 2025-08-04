@@ -36,6 +36,12 @@ static float daly_bms_get_power(void* bms_handle) {
     return handle->data.power;
 }
 
+static float daly_bms_get_full_capacity(void* bms_handle) {
+    // Daly BMS doesn't directly provide full capacity in the standard protocol
+    // This would need to be calculated or configured separately
+    return 0.0f;
+}
+
 static int daly_bms_get_cell_count(void* bms_handle) {
     daly_bms_handle_t* handle = (daly_bms_handle_t*)bms_handle;
     return handle->data.numberOfCells;
@@ -180,6 +186,7 @@ bms_interface_t* daly_bms_create(uart_port_t uart_port, int rx_pin, int tx_pin) 
     interface->getPackCurrent = daly_bms_get_pack_current;
     interface->getStateOfCharge = daly_bms_get_soc;
     interface->getPower = daly_bms_get_power;
+    interface->getFullCapacity = daly_bms_get_full_capacity;
     interface->getCellCount = daly_bms_get_cell_count;
     interface->getCellVoltage = daly_bms_get_cell_voltage;
     interface->getMinCellVoltage = daly_bms_get_min_cell_voltage;
