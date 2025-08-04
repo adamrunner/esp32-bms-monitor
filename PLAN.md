@@ -150,7 +150,7 @@ The `src/main.cpp` will:
 - [x] Add auto-detection of BMS type
 - [x] Configure serial output for monitoring
 - [x] Test with actual BMS hardware
-- [ ] Figure out state of charge for JBD BMS
+- [x] Figure out state of charge for JBD BMS
 - [ ] (Future) Implement BMS sniffing to automatically detect connected BMS type
 - [ ] (Future) Implement SD card data logging
 - [ ] (Future) Add display support for new ESP32 module
