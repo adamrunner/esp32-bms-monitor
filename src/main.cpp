@@ -5,6 +5,8 @@
 #include "driver/uart.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include "esp_timer.h"
+#include <stdint.h>
 #include "bms_interface.h"
 #include "daly_bms.h"
 #include "jbd_bms.h"
@@ -43,6 +45,11 @@ extern "C" void app_main(void)
 
     ESP_LOGI(TAG, "BMS interface created successfully");
 
+    // Variables for time and energy tracking
+    uint64_t start_time = esp_timer_get_time();
+    uint64_t last_time = start_time;
+    double total_energy_wh = 0.0;
+
     // Main monitoring loop
     while (1) {
         // Read all BMS measurements
@@ -53,6 +60,19 @@ extern "C" void app_main(void)
             float soc = bms_interface->getStateOfCharge(bms_interface->handle);
             float power = bms_interface->getPower(bms_interface->handle);
             float full_capacity = bms_interface->getFullCapacity(bms_interface->handle);
+
+            // Time and energy accumulation
+            uint64_t current_time = esp_timer_get_time();
+            double elapsed_us = (double)(current_time - last_time);
+            double elapsed_h = elapsed_us / 1e6 / 3600;
+            total_energy_wh += power * elapsed_h;
+            last_time = current_time;
+            // Calculate elapsed time since start
+            uint64_t total_elapsed_us = current_time - start_time;
+            unsigned int elapsed_sec = total_elapsed_us / 1000000;
+            unsigned int hours = elapsed_sec / 3600;
+            unsigned int minutes = (elapsed_sec % 3600) / 60;
+            unsigned int seconds = elapsed_sec % 60;
 
             // Get cell information
             int cell_count = bms_interface->getCellCount(bms_interface->handle);
@@ -77,6 +97,8 @@ extern "C" void app_main(void)
 
             // Display measurements via serial
             printf("\n=== BMS Monitor Data ===\n");
+            printf("Elapsed Time: %02u:%02u:%02u (hh:mm:ss)\n", hours, minutes, seconds);
+            printf("Total Energy: %.3f Wh\n", total_energy_wh);
             printf("Pack Voltage: %.2f V\n", voltage);
             printf("Pack Current: %.2f A\n", current);
             printf("State of Charge: %.1f%%\n", soc);
