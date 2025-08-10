@@ -10,6 +10,7 @@
 #include "bms_interface.h"
 #include "daly_bms.h"
 #include "jbd_bms.h"
+#include "logging.h"
 
 static const char *TAG = "bms_monitor";
 
@@ -44,6 +45,19 @@ extern "C" void app_main(void)
     }
 
     ESP_LOGI(TAG, "BMS interface created successfully");
+
+    // Configure logging format and prepare runtime CSV header sizing
+    #ifdef LOG_FORMAT_CSV
+    static logging::LogConfig g_log_cfg{
+        .format = logging::LogFormat::CSV,
+        .csv_print_header_once = true,
+        .header_cells = logging::DEFAULT_MAX_CSV_CELLS,
+        .header_temps = logging::DEFAULT_MAX_CSV_TEMPS
+    };
+    #else
+    static logging::LogConfig g_log_cfg{};
+    #endif
+    static bool g_csv_header_configured = false;
 
     // Variables for time and energy tracking
     uint64_t start_time = esp_timer_get_time();
@@ -95,43 +109,82 @@ extern "C" void app_main(void)
             bool charging_enabled = bms_interface->isChargingEnabled(bms_interface->handle);
             bool discharging_enabled = bms_interface->isDischargingEnabled(bms_interface->handle);
 
-            // Display measurements via serial
-            printf("\n=== BMS Monitor Data ===\n");
-            printf("Elapsed Time: %02u:%02u:%02u (hh:mm:ss)\n", hours, minutes, seconds);
-            printf("Total Energy: %.3f Wh\n", total_energy_wh);
-            printf("Pack Voltage: %.2f V\n", voltage);
-            printf("Pack Current: %.2f A\n", current);
-            printf("State of Charge: %.1f%%\n", soc);
-            printf("Power: %.2f W\n", power);
-            if (full_capacity > 0) {
-                printf("Full Capacity: %.2f Ah\n", full_capacity);
-            }
-            printf("Peak Current: %.2f A\n", peak_current);
-            printf("Peak Power: %.2f W\n", peak_power);
-            printf("Cell Count: %d\n", cell_count);
-            printf("Cell Voltage Range: %.3f V (Cell %d) - %.3f V (Cell %d)\n",
-                   min_cell_voltage, min_cell_num, max_cell_voltage, max_cell_num);
-            printf("Cell Voltage Delta: %.3f V\n", cell_voltage_delta);
-            printf("Temperature Count: %d\n", temp_count);
-            printf("Temperature Range: %.1f°C - %.1f°C\n", min_temp, max_temp);
-            printf("Charging Enabled: %s\n", charging_enabled ? "YES" : "NO");
-            printf("Discharging Enabled: %s\n", discharging_enabled ? "YES" : "NO");
-            printf("========================\n");
+            // Emit via pluggable logger (Human or CSV)
+            logging::MeasurementSnapshot s{};
+            s.start_time_us = start_time;
+            s.now_time_us = current_time;
+            s.elapsed_sec = elapsed_sec;
+            s.hours = hours;
+            s.minutes = minutes;
+            s.seconds = seconds;
 
-            // Display individual cell voltages
-            printf("Individual Cell Voltages:\n");
-            for (int i = 0; i < cell_count && i < 16; i++) { // Limit to first 16 cells for readability
-                float cell_voltage = bms_interface->getCellVoltage(bms_interface->handle, i);
-                printf("  Cell %d: %.3f V\n", i + 1, cell_voltage);
+            s.total_energy_wh = total_energy_wh;
+
+            s.pack_voltage_v = voltage;
+            s.pack_current_a = current;
+            s.soc_pct = soc;
+            s.power_w = power;
+            s.full_capacity_ah = static_cast<float>(full_capacity);
+
+            s.peak_current_a = peak_current;
+            s.peak_power_w = peak_power;
+
+            s.cell_count = cell_count;
+            s.min_cell_voltage_v = min_cell_voltage;
+            s.max_cell_voltage_v = max_cell_voltage;
+            s.min_cell_num = min_cell_num;
+            s.max_cell_num = max_cell_num;
+            s.cell_voltage_delta_v = cell_voltage_delta;
+
+            s.temp_count = temp_count;
+            s.min_temp_c = min_temp;
+            s.max_temp_c = max_temp;
+
+            s.charging_enabled = charging_enabled;
+            s.discharging_enabled = discharging_enabled;
+
+            // Populate arrays (bounded)
+            {
+                int cells = cell_count;
+                if (cells > logging::DEFAULT_MAX_CSV_CELLS) cells = logging::DEFAULT_MAX_CSV_CELLS;
+                for (int i = 0; i < cells; ++i) {
+                    s.cell_v[static_cast<size_t>(i)] = bms_interface->getCellVoltage(bms_interface->handle, i);
+                }
+            }
+            {
+                int temps = temp_count;
+                if (temps > logging::DEFAULT_MAX_CSV_TEMPS) temps = logging::DEFAULT_MAX_CSV_TEMPS;
+                for (int i = 0; i < temps; ++i) {
+                    s.temp_c[static_cast<size_t>(i)] = bms_interface->getTemperature(bms_interface->handle, i);
+                }
             }
 
-            // Display individual temperatures
-            printf("Individual Temperatures:\n");
-            for (int i = 0; i < temp_count && i < 8; i++) { // Limit to first 8 sensors for readability
-                float temperature = bms_interface->getTemperature(bms_interface->handle, i);
-                printf("  Temp %d: %.1f°C\n", i + 1, temperature);
+            // Configure CSV header counts once (auto-detect or build-time override) before first emission
+            if (g_log_cfg.format == logging::LogFormat::CSV && !g_csv_header_configured) {
+                int hc =
+                #ifdef LOG_CSV_CELLS
+                    LOG_CSV_CELLS;
+                #else
+                    cell_count;
+                #endif
+                if (hc < 0) hc = 0;
+                if (hc > logging::DEFAULT_MAX_CSV_CELLS) hc = logging::DEFAULT_MAX_CSV_CELLS;
+
+                int ht =
+                #ifdef LOG_CSV_TEMPS
+                    LOG_CSV_TEMPS;
+                #else
+                    temp_count;
+                #endif
+                if (ht < 0) ht = 0;
+                if (ht > logging::DEFAULT_MAX_CSV_TEMPS) ht = logging::DEFAULT_MAX_CSV_TEMPS;
+
+                g_log_cfg.header_cells = hc;
+                g_log_cfg.header_temps = ht;
+                g_csv_header_configured = true;
             }
 
+            logging::log_emit(s, g_log_cfg);
         } else {
             ESP_LOGE(TAG, "Failed to read BMS measurements");
             printf("ERROR: Failed to read BMS data\n");
