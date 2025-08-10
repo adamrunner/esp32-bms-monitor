@@ -1,0 +1,203 @@
+ESP32 Display Module (E32R35T/E32N35T) Technical Specification
+Hardware Overview
+
+Models:
+
+E32R35T: 3.5" display with resistive touch screen
+E32N35T: 3.5" display without touch screen
+
+
+Main Controller: ESP32-WROOM-32E module
+Display Driver: ST7796U IC
+Touch Controller: XPT2046 IC (E32R35T only)
+
+ESP32 Specifications
+
+Module: ESP32-WROOM-32E
+CPU: ESP32-D0WD-V3, Xtensa dual-core 32-bit LX6 microprocessor
+Max Frequency: 240MHz
+Memory:
+
+48KB ROM + 520KB SRAM + 16KB RTC SRAM
+4MB external QSPI Flash
+
+
+WiFi: 2.4GHz, 802.11b/g/n modes
+Bluetooth: V4.2 BR/EDR and Bluetooth LE
+Operating Voltage: 3.0-3.6V
+Operating Temperature: -40°C to +85°C
+
+Display Specifications
+
+Size: 3.5 inches
+Type: TN TFT
+Resolution: 320×480 pixels (320×RGB×480)
+Colors: Max 262K (RGB666), Common 65K (RGB565)
+Active Area: 48.96(W) × 73.44(H) mm
+Interface: 4-Line SPI
+Backlight: White LED×6, 300 cd/m²
+Operating Temperature: -10°C to +50°C
+
+Touch Screen Specifications (E32R35T only)
+
+Type: Resistive touch screen
+Resolution: 320×480 pixels
+Driver IC: XPT2046
+Interface: SPI
+Active Area: 49.50(W) × 77.24(H) mm
+Material: ITO film + ITO glass
+
+Critical GPIO Pin Assignments
+LCD Control
+
+IO15: LCD chip select (CS) - LOW active
+IO2: Command/Data select (DC) - HIGH=data, LOW=command
+IO14: SPI Clock (SCK) - shared with touch
+IO13: SPI MOSI (data to display) - shared with touch
+IO12: SPI MISO (data from display) - shared with touch
+EN: Reset pin (shared with ESP32 reset)
+IO27: Backlight control - HIGH=on, LOW=off
+
+Touch Screen (E32R35T only)
+
+IO33: Touch chip select (CS) - LOW active
+IO36: Touch interrupt (IRQ) - LOW when touched
+IO14: SPI Clock (shared with LCD)
+IO13: SPI MOSI (shared with LCD)
+IO12: SPI MISO (shared with LCD)
+
+RGB LED Indicators
+
+IO22: Red LED (common anode, LOW=on, HIGH=off)
+IO16: Green LED (common anode, LOW=on, HIGH=off)
+IO17: Blue LED (common anode, LOW=on, HIGH=off)
+
+MicroSD Card
+
+IO5: SD card chip select (CS) - LOW active
+IO23: SPI MOSI (shared with SPI peripheral)
+IO18: SPI Clock (shared with SPI peripheral)
+IO19: SPI MISO (shared with SPI peripheral)
+
+Audio
+
+IO4: Audio enable - LOW=enable, HIGH=disable
+IO26: Audio DAC output signal
+
+User Buttons
+
+IO0: BOOT button (download mode/user button)
+EN: RESET button (shared with LCD reset)
+
+Battery Management
+
+IO34: Battery voltage ADC input
+
+External Peripheral Connectors
+SPI Peripheral Interface (1.25mm 4P):
+
+IO21: SPI chip select (CS) - LOW active
+IO18: SPI Clock (shared with MicroSD)
+IO19: SPI MISO (shared with MicroSD)
+IO23: SPI MOSI (shared with MicroSD)
+
+I2C Peripheral Interface (1.25mm 4P):
+
+IO25: I2C Clock (SCL)
+IO32: I2C Data (SDA)
+
+Serial Port (1.25mm 4P):
+
+IO3 (RXD0): UART receive
+IO1 (TXD0): UART transmit
+
+Input Only Pins (1.25mm 2P):
+
+IO35: Input only
+IO39: Input only
+
+Power Specifications
+
+Working Voltage: 5.0V (via USB-C)
+Battery: 3.7V polymer lithium battery
+Charging: 4.2-6.5V input, typical 5V, max 500mA
+Current Consumption:
+
+ESP32 reset: 40mA
+Display only: 170mA
+Full operation (display + speaker + charging): 520mA
+
+
+Backlight Current: 118mA
+
+Physical Dimensions
+
+Module Size:
+
+With touch: 55.50(W) × 101.50(H) × 5.80(D) mm
+Without touch: 55.50(W) × 101.50(H) × 4.60(D) mm
+
+
+Weight:
+
+E32R35T: 112g (including package)
+E32N35T: 101g (including package)
+
+
+
+Communication Protocols
+
+Display: 4-wire SPI
+Touch: SPI (shared bus with display)
+MicroSD: SPI (shared with external SPI peripheral)
+External peripherals: SPI and I2C available
+
+Key Programming Notes
+Initialization Sequence
+
+Backlight Control: Must pull IO27 HIGH to enable backlight
+SPI Bus Sharing: LCD, touch, and MicroSD share SPI pins - handle chip selects carefully
+Reset: EN pin resets both ESP32 and LCD
+
+SPI Bus Management
+
+Shared Pins: IO14 (SCK), IO13 (MOSI), IO12 (MISO)
+Chip Selects:
+
+LCD: IO15
+Touch: IO33
+MicroSD: IO5
+External SPI: IO21
+
+
+
+Touch Screen Considerations (E32R35T)
+
+Requires calibration for accurate coordinate mapping
+Interrupt-driven (IO36) or polling modes available
+Shares SPI bus - coordinate access with display operations
+
+LED Control
+
+Common anode configuration (active LOW)
+Can be used for status indication
+
+Audio Output
+
+Enable via IO4 (LOW to enable)
+DAC output on IO26
+External speaker connection via 1.25mm connector
+
+Battery Management
+
+Monitor battery voltage via IO34 ADC
+3.7V lithium polymer only
+Built-in charging management
+
+Arduino Framework Considerations
+
+Use ESP32 board definition in PlatformIO
+SPI library for display/touch/SD communication
+Consider using display libraries like TFT_eSPI
+WiFi and Bluetooth capabilities available
+Multiple SPI devices require careful chip select management
