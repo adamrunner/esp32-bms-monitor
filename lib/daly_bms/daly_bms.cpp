@@ -1,12 +1,8 @@
 #include <string.h>
 #include <math.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
-#include <driver/uart.h>
-#include <esp_log.h>
+#include <Arduino.h>
 #include "daly_bms.h"
 
-static const char *TAG = "daly_bms";
 
 // BMS Interface function implementations
 static bool daly_bms_read_measurements(void* bms_handle) {
@@ -122,58 +118,40 @@ static float daly_bms_get_cell_voltage_delta(void* bms_handle) {
 }
 
 // Create Daly BMS interface
-bms_interface_t* daly_bms_create(uart_port_t uart_port, int rx_pin, int tx_pin) {
-    daly_bms_handle_t* handle = calloc(1, sizeof(daly_bms_handle_t));
+bms_interface_t* daly_bms_create(int uart_num, int rx_pin, int tx_pin) {
+    daly_bms_handle_t* handle = (daly_bms_handle_t*)calloc(1, sizeof(daly_bms_handle_t));
     if (!handle) {
-        ESP_LOGE(TAG, "Failed to allocate memory for Daly BMS handle");
+        Serial.println("ERROR: Failed to allocate memory for Daly BMS handle");
         return NULL;
     }
 
-    handle->uart_port = uart_port;
-
-    // Initialize UART
-    uart_config_t uart_config = {
-        .baud_rate = DALY_BMS_BAUD_RATE,
-        .data_bits = UART_DATA_8_BITS,
-        .parity = UART_PARITY_DISABLE,
-        .stop_bits = UART_STOP_BITS_1,
-        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-    };
-
-    esp_err_t err = uart_param_config(uart_port, &uart_config);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to configure UART: %s", esp_err_to_name(err));
+    // Initialize Arduino UART
+    if (uart_num == 1) {
+        handle->serial = &Serial1;
+    } else if (uart_num == 2) {
+        handle->serial = &Serial2;
+    } else {
+        Serial.println("ERROR: Unsupported UART number for Daly BMS");
         free(handle);
         return NULL;
     }
-
-    err = uart_set_pin(uart_port, tx_pin, rx_pin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to set UART pins: %s", esp_err_to_name(err));
-        free(handle);
-        return NULL;
-    }
-
-    err = uart_driver_install(uart_port, 256, 0, 0, NULL, 0);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to install UART driver: %s", esp_err_to_name(err));
-        free(handle);
-        return NULL;
-    }
+    
+    handle->serial->begin(DALY_BMS_BAUD_RATE, SERIAL_8N1, rx_pin, tx_pin);
+    delay(100);  // Give UART time to initialize
 
     // Initialize the BMS
     if (!daly_bms_init(handle)) {
-        ESP_LOGE(TAG, "Failed to initialize Daly BMS");
-        uart_driver_delete(uart_port);
+        Serial.println("ERROR: Failed to initialize Daly BMS");
+        handle->serial->end();
         free(handle);
         return NULL;
     }
 
     // Create and populate interface structure
-    bms_interface_t* interface = calloc(1, sizeof(bms_interface_t));
+    bms_interface_t* interface = (bms_interface_t*)calloc(1, sizeof(bms_interface_t));
     if (!interface) {
-        ESP_LOGE(TAG, "Failed to allocate memory for BMS interface");
-        uart_driver_delete(uart_port);
+        Serial.println("ERROR: Failed to allocate memory for BMS interface");
+        handle->serial->end();
         free(handle);
         return NULL;
     }
@@ -210,7 +188,7 @@ void daly_bms_destroy(bms_interface_t* bms_interface) {
     if (bms_interface) {
         if (bms_interface->handle) {
             daly_bms_handle_t* handle = (daly_bms_handle_t*)bms_interface->handle;
-            uart_driver_delete(handle->uart_port);
+            handle->serial->end();
             free(handle);
         }
         free(bms_interface);
@@ -278,7 +256,7 @@ void daly_bms_send_command(daly_bms_handle_t* handle, daly_command_t cmd_id) {
     handle->tx_buffer[12] = checksum;
 
     // Send command
-    uart_write_bytes(handle->uart_port, (const char*)handle->tx_buffer, DALY_XFER_BUFFER_LENGTH);
+    handle->serial->write(handle->tx_buffer, DALY_XFER_BUFFER_LENGTH);
 }
 
 // Receive bytes from BMS
@@ -291,7 +269,14 @@ bool daly_bms_receive_bytes(daly_bms_handle_t* handle) {
     memset(handle->rx_buffer, 0, DALY_XFER_BUFFER_LENGTH);
 
     // Read response
-    int bytes_read = uart_read_bytes(handle->uart_port, handle->rx_buffer, DALY_XFER_BUFFER_LENGTH, pdMS_TO_TICKS(100));
+    unsigned long start_time = millis();
+    int bytes_read = 0;
+    while ((bytes_read < DALY_XFER_BUFFER_LENGTH) && (millis() - start_time < 100)) {
+        if (handle->serial->available()) {
+            handle->rx_buffer[bytes_read++] = handle->serial->read();
+        }
+        delay(1);
+    }
 
     if (bytes_read == DALY_XFER_BUFFER_LENGTH) {
         // Validate checksum
@@ -572,7 +557,7 @@ bool daly_bms_set_discharge_mos(daly_bms_handle_t* handle, bool sw) {
     daly_bms_send_command(handle, DALY_CMD_DISCHRG_FET);
 
     // No response expected for this command
-    vTaskDelay(pdMS_TO_TICKS(100));
+    delay(100);
 
     return true;
 }
@@ -590,7 +575,7 @@ bool daly_bms_set_charge_mos(daly_bms_handle_t* handle, bool sw) {
     daly_bms_send_command(handle, DALY_CMD_CHRG_FET);
 
     // No response expected for this command
-    vTaskDelay(pdMS_TO_TICKS(100));
+    delay(100);
 
     return true;
 }
@@ -626,7 +611,7 @@ bool daly_bms_reset(daly_bms_handle_t* handle) {
     daly_bms_send_command(handle, DALY_CMD_BMS_RESET);
 
     // No response expected for this command
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    delay(1000);
 
     return true;
 }

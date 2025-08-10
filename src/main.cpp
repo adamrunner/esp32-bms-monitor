@@ -1,16 +1,10 @@
-#include <stdio.h>
+#include <Arduino.h>
 #include <stdint.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
-#include <driver/uart.h>
-#include <esp_log.h>
-#include <esp_timer.h>
 #include "bms_interface.h"
 #include "daly_bms.h"
 #include "jbd_bms.h"
 #include "logging.h"
 
-static const char *TAG = "bms_monitor";
 static constexpr uint32_t READ_INTERVAL_MS = 1000;
 
 // BMS instances
@@ -24,44 +18,56 @@ static bool auto_detect_bms_type() {
     return false; // Assume JBD BMS for now
 }
 
-extern "C" void app_main(void)
+// Variables for time and energy tracking
+static uint64_t start_time = 0;
+static uint64_t last_time = 0;
+static double total_energy_wh = 0.0;
+
+// Configure logging format and prepare runtime CSV header sizing
+static logging::LogConfig g_log_cfg{};
+static bool g_csv_header_configured = false;
+
+void setup()
 {
-    ESP_LOGI(TAG, "Starting BMS Monitor Application");
+    Serial.begin(115200);
+    while (!Serial) {
+        delay(10);
+    }
+    
+    Serial.println("Starting BMS Monitor Application");
 
     // Auto-detect BMS type
-    // Assume 16/17 are the RX/TX pins for UART communication
+    // UART1: RX=GPIO27, TX=GPIO14
     if (auto_detect_bms_type()) {
-        ESP_LOGI(TAG, "Daly BMS detected, initializing...");
-        bms_interface = daly_bms_create(UART_NUM_1, 16, 17);
+        Serial.println("Daly BMS detected, initializing...");
+        bms_interface = daly_bms_create(1, 27, 14);  // UART1 with GPIO27(RX), GPIO14(TX)
     } else {
-        ESP_LOGI(TAG, "JBD BMS detected, initializing...");
-        bms_interface = jbd_bms_create(UART_NUM_1, 16, 17);
+        Serial.println("JBD BMS detected, initializing...");
+        bms_interface = jbd_bms_create(1, 27, 14);
     }
 
     if (!bms_interface) {
-        ESP_LOGE(TAG, "Failed to create BMS interface");
+        Serial.println("ERROR: Failed to create BMS interface");
         return;
     }
 
-    ESP_LOGI(TAG, "BMS interface created successfully");
+    Serial.println("BMS interface created successfully");
 
-    // Configure logging format and prepare runtime CSV header sizing
-    static logging::LogConfig g_log_cfg{};
     #ifdef LOG_FORMAT_CSV
     g_log_cfg.format = logging::LogFormat::CSV;
     g_log_cfg.csv_print_header_once = true;
     g_log_cfg.header_cells = logging::DEFAULT_MAX_CSV_CELLS;
     g_log_cfg.header_temps = logging::DEFAULT_MAX_CSV_TEMPS;
     #endif
-    static bool g_csv_header_configured = false;
 
-    // Variables for time and energy tracking
-    uint64_t start_time = esp_timer_get_time();
-    uint64_t last_time = start_time;
-    double total_energy_wh = 0.0;
+    // Initialize timing variables
+    start_time = millis() * 1000;  // Convert to microseconds
+    last_time = start_time;
+}
 
-    // Main monitoring loop
-    while (1) {
+void loop()
+{
+
         // Read all BMS measurements
         if (bms_interface->readMeasurements(bms_interface->handle)) {
             // Get basic measurements
@@ -72,7 +78,7 @@ extern "C" void app_main(void)
             float full_capacity = bms_interface->getFullCapacity(bms_interface->handle);
 
             // Time and energy accumulation
-            uint64_t current_time = esp_timer_get_time();
+            uint64_t current_time = millis() * 1000;  // Convert to microseconds
             double elapsed_us = (double)(current_time - last_time);
             double elapsed_h = elapsed_us / 1e6 / 3600;
             total_energy_wh += power * elapsed_h;
@@ -182,11 +188,9 @@ extern "C" void app_main(void)
 
             logging::log_emit(s, g_log_cfg);
         } else {
-            ESP_LOGE(TAG, "Failed to read BMS measurements");
-            printf("ERROR: Failed to read BMS data\n");
+            Serial.println("ERROR: Failed to read BMS data");
         }
 
         // Wait before next reading
-        vTaskDelay(pdMS_TO_TICKS(READ_INTERVAL_MS));
-    }
+        delay(READ_INTERVAL_MS);
 }

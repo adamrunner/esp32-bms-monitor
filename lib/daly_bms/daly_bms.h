@@ -7,13 +7,12 @@ extern "C" {
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <driver/uart.h>
+#include <HardwareSerial.h>
 #include "bms_interface.h"
 
 // Daly BMS specific definitions
-#define DALY_BMS_UART_PORT UART_NUM_1
-#define DALY_BMS_RX_PIN 16
-#define DALY_BMS_TX_PIN 17
+#define DALY_BMS_RX_PIN 27  // GPIO27 for UART1 RX
+#define DALY_BMS_TX_PIN 14  // GPIO14 for UART1 TX
 #define DALY_BMS_BAUD_RATE 9600
 #define DALY_XFER_BUFFER_LENGTH 13
 #define DALY_MAX_NUMBER_CELLS 48
@@ -153,7 +152,7 @@ typedef struct {
 
 // Daly BMS handle structure
 typedef struct {
-    uart_port_t uart_port;
+    HardwareSerial* serial;
     daly_bms_data_t data;
     daly_bms_alarm_t alarm;
     uint8_t tx_buffer[DALY_XFER_BUFFER_LENGTH];
@@ -161,7 +160,7 @@ typedef struct {
 } daly_bms_handle_t;
 
 // Function prototypes
-bms_interface_t* daly_bms_create(uart_port_t uart_port, int rx_pin, int tx_pin);
+bms_interface_t* daly_bms_create(int uart_num, int rx_pin, int tx_pin);
 void daly_bms_destroy(bms_interface_t* bms_interface);
 bool daly_bms_init(daly_bms_handle_t* handle);
 bool daly_bms_update(daly_bms_handle_t* handle);

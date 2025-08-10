@@ -1,12 +1,8 @@
 #include <string.h>
 #include <math.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
-#include <driver/uart.h>
-#include <esp_log.h>
+#include <Arduino.h>
 #include "jbd_bms.h"
 
-static const char *TAG = "jbd_bms";
 
 // Helper macros
 #define _getshort(p) ((int16_t)((*((p)) << 8) | *((p)+1)))
@@ -126,58 +122,40 @@ static float jbd_bms_get_cell_voltage_delta(void* bms_handle) {
 }
 
 // Create JBD BMS interface
-bms_interface_t* jbd_bms_create(uart_port_t uart_port, int rx_pin, int tx_pin) {
-    jbd_bms_handle_t* handle = calloc(1, sizeof(jbd_bms_handle_t));
+bms_interface_t* jbd_bms_create(int uart_num, int rx_pin, int tx_pin) {
+    jbd_bms_handle_t* handle = (jbd_bms_handle_t*)calloc(1, sizeof(jbd_bms_handle_t));
     if (!handle) {
-        ESP_LOGE(TAG, "Failed to allocate memory for JBD BMS handle");
+        Serial.println("ERROR: Failed to allocate memory for JBD BMS handle");
         return NULL;
     }
 
-    handle->uart_port = uart_port;
-
-    // Initialize UART
-    uart_config_t uart_config = {
-        .baud_rate = JBD_BMS_BAUD_RATE,
-        .data_bits = UART_DATA_8_BITS,
-        .parity = UART_PARITY_DISABLE,
-        .stop_bits = UART_STOP_BITS_1,
-        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-    };
-
-    esp_err_t err = uart_param_config(uart_port, &uart_config);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to configure UART: %s", esp_err_to_name(err));
+    // Initialize Arduino UART
+    if (uart_num == 1) {
+        handle->serial = &Serial1;
+    } else if (uart_num == 2) {
+        handle->serial = &Serial2;
+    } else {
+        Serial.println("ERROR: Unsupported UART number for JBD BMS");
         free(handle);
         return NULL;
     }
-
-    err = uart_set_pin(uart_port, tx_pin, rx_pin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to set UART pins: %s", esp_err_to_name(err));
-        free(handle);
-        return NULL;
-    }
-
-    err = uart_driver_install(uart_port, 256, 0, 0, NULL, 0);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to install UART driver: %s", esp_err_to_name(err));
-        free(handle);
-        return NULL;
-    }
+    
+    handle->serial->begin(JBD_BMS_BAUD_RATE, SERIAL_8N1, rx_pin, tx_pin);
+    delay(100);  // Give UART time to initialize
 
     // Initialize the BMS
     if (!jbd_bms_init(handle)) {
-        ESP_LOGE(TAG, "Failed to initialize JBD BMS");
-        uart_driver_delete(uart_port);
+        Serial.println("ERROR: Failed to initialize JBD BMS");
+        handle->serial->end();
         free(handle);
         return NULL;
     }
 
     // Create and populate interface structure
-    bms_interface_t* interface = calloc(1, sizeof(bms_interface_t));
+    bms_interface_t* interface = (bms_interface_t*)calloc(1, sizeof(bms_interface_t));
     if (!interface) {
-        ESP_LOGE(TAG, "Failed to allocate memory for BMS interface");
-        uart_driver_delete(uart_port);
+        Serial.println("ERROR: Failed to allocate memory for BMS interface");
+        handle->serial->end();
         free(handle);
         return NULL;
     }
@@ -214,7 +192,7 @@ void jbd_bms_destroy(bms_interface_t* bms_interface) {
     if (bms_interface) {
         if (bms_interface->handle) {
             jbd_bms_handle_t* handle = (jbd_bms_handle_t*)bms_interface->handle;
-            uart_driver_delete(handle->uart_port);
+            handle->serial->end();
             free(handle);
         }
         free(bms_interface);
@@ -444,19 +422,27 @@ bool jbd_bms_read_data(jbd_bms_handle_t* handle) {
     cmd_len = jbd_cmd(handle, JBD_CMD_READ, JBD_CMD_HWINFO, NULL, 0);
     if (cmd_len < 0) return false;
 
-    uart_write_bytes(handle->uart_port, (const char*)handle->tx_buffer, cmd_len);
+    handle->serial->write(handle->tx_buffer, cmd_len);
 
     // Read response with retries
     while (retries-- > 0) {
         memset(handle->rx_buffer, 0, JBD_XFER_BUFFER_LENGTH);
-        bytes_read = uart_read_bytes(handle->uart_port, handle->rx_buffer, JBD_XFER_BUFFER_LENGTH, pdMS_TO_TICKS(100));
+        unsigned long start_time = millis();
+        bytes_read = 0;
+        while ((bytes_read < JBD_XFER_BUFFER_LENGTH) && (millis() - start_time < 100)) {
+            if (handle->serial->available()) {
+                handle->rx_buffer[bytes_read++] = handle->serial->read();
+            } else {
+                delay(1);
+            }
+        }
 
         if (bytes_read > 0 && jbd_verify(handle, handle->rx_buffer, bytes_read, JBD_CMD_HWINFO)) {
             jbd_parse_hwinfo(handle, &handle->rx_buffer[4], handle->rx_buffer[3]);
             break;
         }
 
-        vTaskDelay(pdMS_TO_TICKS(50));
+        delay(50);
     }
 
     if (retries <= 0) return false;
@@ -466,18 +452,26 @@ bool jbd_bms_read_data(jbd_bms_handle_t* handle) {
     cmd_len = jbd_cmd(handle, JBD_CMD_READ, JBD_CMD_CELLINFO, NULL, 0);
     if (cmd_len < 0) return false;
 
-    uart_write_bytes(handle->uart_port, (const char*)handle->tx_buffer, cmd_len);
+    handle->serial->write(handle->tx_buffer, cmd_len);
 
     while (retries-- > 0) {
         memset(handle->rx_buffer, 0, JBD_XFER_BUFFER_LENGTH);
-        bytes_read = uart_read_bytes(handle->uart_port, handle->rx_buffer, JBD_XFER_BUFFER_LENGTH, pdMS_TO_TICKS(100));
+        unsigned long start_time = millis();
+        bytes_read = 0;
+        while ((bytes_read < JBD_XFER_BUFFER_LENGTH) && (millis() - start_time < 100)) {
+            if (handle->serial->available()) {
+                handle->rx_buffer[bytes_read++] = handle->serial->read();
+            } else {
+                delay(1);
+            }
+        }
 
         if (bytes_read > 0 && jbd_verify(handle, handle->rx_buffer, bytes_read, JBD_CMD_CELLINFO)) {
             jbd_parse_cellinfo(handle, &handle->rx_buffer[4], handle->rx_buffer[3]);
             break;
         }
 
-        vTaskDelay(pdMS_TO_TICKS(50));
+        delay(50);
     }
 
     return (retries > 0);

@@ -7,13 +7,12 @@ extern "C" {
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <driver/uart.h>
+#include <HardwareSerial.h>
 #include "bms_interface.h"
 
 // JBD BMS specific definitions
-#define JBD_BMS_UART_PORT UART_NUM_1
-#define JBD_BMS_RX_PIN 16
-#define JBD_BMS_TX_PIN 17
+#define JBD_BMS_RX_PIN 27   // GPIO27 for UART1 RX
+#define JBD_BMS_TX_PIN 14   // GPIO14 for UART1 TX
 #define JBD_BMS_BAUD_RATE 9600
 #define JBD_XFER_BUFFER_LENGTH 256
 #define JBD_MAX_CELLS 48
@@ -83,14 +82,14 @@ typedef struct {
 
 // JBD BMS handle structure
 typedef struct {
-    uart_port_t uart_port;
+    HardwareSerial* serial;
     jbd_bms_data_t data;
     uint8_t tx_buffer[JBD_XFER_BUFFER_LENGTH];
     uint8_t rx_buffer[JBD_XFER_BUFFER_LENGTH];
 } jbd_bms_handle_t;
 
 // Function prototypes
-bms_interface_t* jbd_bms_create(uart_port_t uart_port, int rx_pin, int tx_pin);
+bms_interface_t* jbd_bms_create(int uart_num, int rx_pin, int tx_pin);
 void jbd_bms_destroy(bms_interface_t* bms_interface);
 bool jbd_bms_init(jbd_bms_handle_t* handle);
 bool jbd_bms_update(jbd_bms_handle_t* handle);
