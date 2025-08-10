@@ -1,18 +1,17 @@
 #include <stdio.h>
-#include <string.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "driver/uart.h"
-#include "driver/gpio.h"
-#include "esp_log.h"
-#include "esp_timer.h"
 #include <stdint.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <driver/uart.h>
+#include <esp_log.h>
+#include <esp_timer.h>
 #include "bms_interface.h"
 #include "daly_bms.h"
 #include "jbd_bms.h"
 #include "logging.h"
 
 static const char *TAG = "bms_monitor";
+static constexpr uint32_t READ_INTERVAL_MS = 1000;
 
 // BMS instances
 static bms_interface_t* bms_interface = NULL;
@@ -191,6 +190,6 @@ extern "C" void app_main(void)
         }
 
         // Wait before next reading
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(READ_INTERVAL_MS));
     }
 }

@@ -10,9 +10,11 @@ Build/lint/test
 
 Code style
 - Language: C++ (ESP-IDF). Mirror patterns in src/main.cpp and existing sources.
-- Imports: angle brackets for SDK/libs (freertos/…, esp_log.h); quotes for local headers. Keep using rmt_led_strip.hpp from lib_deps.
+- Imports: angle brackets for ESP-IDF/SDK headers (freertos/…, driver/…, esp_log.h, esp_timer.h); quotes for project headers (include/, lib/). Use C standard headers with .h names (<stdio.h>, <string.h>, <stdint.h>) as needed; do not use <stdio>. If choosing C++ wrappers (<cstdio>, <cstdint>, <cstring>) in C++ sources, qualify with std:: and keep usage consistent.
+- Include order: C/C++ standard headers first, then ESP-IDF/SDK headers, then project headers. Remove unused includes.
+- C/C++ interop: Headers for C libraries in lib/ that are included from C++ must have extern "C" guards to avoid name mangling.
 - Formatting: 4-space indentation; braces on next line as in repo; ~100 char line length; keep includes grouped and ordered.
-- Types: prefer <stdint.h> fixed-width types; avoid magic literals; use const and constexpr where applicable.
+- Types: prefer fixed-width integer types from <stdint.h> in both C and C++ sources; in C++ you may alternatively use <cstdint> with std::uintXX_t. Avoid magic literals; use const and constexpr where applicable.
 - Naming: UPPER_SNAKE_CASE for macros/log TAGs; lower_snake_case for vars/functions (e.g., ws2812 led_strip_instance); PascalCase reserved for library types.
 - Error handling: check return values; log with ESP_LOGx using TAG; early-return on failures; avoid printf for errors; prefer ESP_LOGE.
 - Concurrency: use FreeRTOS APIs from correct context; vTaskDelay(pdMS_TO_TICKS(ms)); avoid busy loops and long critical sections.

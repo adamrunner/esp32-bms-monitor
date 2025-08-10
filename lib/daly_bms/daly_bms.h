@@ -7,7 +7,7 @@ extern "C" {
 
 #include <stdbool.h>
 #include <stdint.h>
-#include "driver/uart.h"
+#include <driver/uart.h>
 #include "bms_interface.h"
 
 // Daly BMS specific definitions

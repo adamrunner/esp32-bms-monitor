@@ -7,7 +7,7 @@ extern "C" {
 
 #include <stdbool.h>
 #include <stdint.h>
-#include "driver/uart.h"
+#include <driver/uart.h>
 #include "bms_interface.h"
 
 // JBD BMS specific definitions

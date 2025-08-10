@@ -1,11 +1,9 @@
-#include <stdio.h>
 #include <string.h>
 #include <math.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "driver/uart.h"
-#include "driver/gpio.h"
-#include "esp_log.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <driver/uart.h>
+#include <esp_log.h>
 #include "jbd_bms.h"
 
 static const char *TAG = "jbd_bms";
