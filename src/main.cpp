@@ -46,15 +46,12 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "BMS interface created successfully");
 
     // Configure logging format and prepare runtime CSV header sizing
-    #ifdef LOG_FORMAT_CSV
-    static logging::LogConfig g_log_cfg{
-        .format = logging::LogFormat::CSV,
-        .csv_print_header_once = true,
-        .header_cells = logging::DEFAULT_MAX_CSV_CELLS,
-        .header_temps = logging::DEFAULT_MAX_CSV_TEMPS
-    };
-    #else
     static logging::LogConfig g_log_cfg{};
+    #ifdef LOG_FORMAT_CSV
+    g_log_cfg.format = logging::LogFormat::CSV;
+    g_log_cfg.csv_print_header_once = true;
+    g_log_cfg.header_cells = logging::DEFAULT_MAX_CSV_CELLS;
+    g_log_cfg.header_temps = logging::DEFAULT_MAX_CSV_TEMPS;
     #endif
     static bool g_csv_header_configured = false;
 

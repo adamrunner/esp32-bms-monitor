@@ -19,7 +19,11 @@ enum class LogFormat
 
 struct LogConfig
 {
+#ifdef LOG_FORMAT_CSV
+    LogFormat format { LogFormat::CSV };
+#else
     LogFormat format { LogFormat::Human };
+#endif
     bool csv_print_header_once { true };
     int header_cells { DEFAULT_MAX_CSV_CELLS };
     int header_temps { DEFAULT_MAX_CSV_TEMPS };
