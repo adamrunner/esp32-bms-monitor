@@ -1,17 +1,17 @@
-#ifndef SERIAL_SINK_H
-#define SERIAL_SINK_H
+#ifndef SERIAL_LOG_SINK_H
+#define SERIAL_LOG_SINK_H
 
 #include "log_sink.h"
 
-namespace logging {
+namespace applog {
 
 // Forward declarations
 enum class LogLevel;
 enum class LogFacility;
 
-class serial_sink : public log_sink {
+class SerialLogSink : public LogSink {
 public:
-    serial_sink();
+    SerialLogSink();
     void begin() override;
     void write(const String& line) override;
     void write(LogLevel level, LogFacility facility, const String& message) override;
@@ -21,6 +21,6 @@ private:
     bool initialized_;
 };
 
-} // namespace logging
+} // namespace applog
 
-#endif // SERIAL_SINK_H
+#endif // SERIAL_LOG_SINK_H

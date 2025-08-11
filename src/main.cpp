@@ -3,12 +3,12 @@
 #include "bms_interface.h"
 #include "daly_bms.h"
 #include "jbd_bms.h"
-#include "logging.h"
+#include "datalog.h"
 #include "wifi_manager.h"
-#include "mqtt_sink.h"
+#include "mqtt_log_sink.h"
 #include "mqtt_manager.h"
-#include "logger.h"
-#include "serial_sink.h"
+#include "applog.h"
+#include "serial_log_sink.h"
 
 static constexpr uint32_t READ_INTERVAL_MS = 1000;
 
@@ -28,11 +28,11 @@ static uint64_t start_time = 0;
 static uint64_t last_time = 0;
 static double total_energy_wh = 0.0;
 
-// Configure logging format and prepare runtime CSV header sizing
-static logging::LogConfig g_log_cfg{};
+// Configure data logging format and prepare runtime CSV header sizing
+static datalog::Config g_data_log_cfg{};
 static bool g_csv_header_configured = false;
-static logging::mqtt_sink* g_mqtt = nullptr;
-static logging::serial_sink* g_serial_sink = nullptr;
+static applog::MqttLogSink* g_mqtt_log_sink = nullptr;
+static applog::SerialLogSink* g_serial_log_sink = nullptr;
 
 void setup()
 {
@@ -42,54 +42,54 @@ void setup()
     }
     
     // Initialize our new logging system
-    g_serial_sink = new logging::serial_sink();
-    g_serial_sink->begin();
-    logging::Logger::getInstance().addSink(std::unique_ptr<logging::log_sink>(g_serial_sink));
+    g_serial_log_sink = new applog::SerialLogSink();
+    g_serial_log_sink->begin();
+    applog::AppLogger::getInstance().addSink(std::unique_ptr<applog::LogSink>(g_serial_log_sink));
     
-    LOG_INFO(logging::LogFacility::MAIN, "Starting BMS Monitor Application");
+    APPLOG_INFO(applog::LogFacility::MAIN, "Starting BMS Monitor Application");
 
     // Auto-detect BMS type
     // UART1: RX=GPIO27, TX=GPIO14
     if (auto_detect_bms_type()) {
-        LOG_INFO(logging::LogFacility::BMS_COMM, "Daly BMS detected, initializing...");
+        APPLOG_INFO(applog::LogFacility::BMS_COMM, "Daly BMS detected, initializing...");
         bms_interface = daly_bms_create(1, 27, 14);  // UART1 with GPIO27(RX), GPIO14(TX)
     } else {
-        LOG_INFO(logging::LogFacility::BMS_COMM, "JBD BMS detected, initializing...");
+        APPLOG_INFO(applog::LogFacility::BMS_COMM, "JBD BMS detected, initializing...");
         bms_interface = jbd_bms_create(1, 27, 14);
     }
 
     if (!bms_interface) {
-        LOG_ERROR(logging::LogFacility::BMS_COMM, "Failed to create BMS interface");
+        APPLOG_ERROR(applog::LogFacility::BMS_COMM, "Failed to create BMS interface");
         return;
     }
 
-    LOG_INFO(logging::LogFacility::BMS_COMM, "BMS interface created successfully");
+    APPLOG_INFO(applog::LogFacility::BMS_COMM, "BMS interface created successfully");
 
     // Initialize WiFi
-    LOG_INFO(logging::LogFacility::WIFI, "Initializing WiFi...");
+    APPLOG_INFO(applog::LogFacility::WIFI, "Initializing WiFi...");
     if (wifi_manager::initialize()) {
         if (wifi_manager::connect()) {
-            LOG_INFO(logging::LogFacility::WIFI, "WiFi connected: %s", wifi_manager::getLocalIP().c_str());
+            APPLOG_INFO(applog::LogFacility::WIFI, "WiFi connected: %s", wifi_manager::getLocalIP().c_str());
         } else {
-            LOG_ERROR(logging::LogFacility::WIFI, "WiFi connection failed: %s", wifi_manager::getStatusString().c_str());
+            APPLOG_ERROR(applog::LogFacility::WIFI, "WiFi connection failed: %s", wifi_manager::getStatusString().c_str());
         }
     } else {
-        LOG_ERROR(logging::LogFacility::WIFI, "WiFi initialization failed");
+        APPLOG_ERROR(applog::LogFacility::WIFI, "WiFi initialization failed");
     }
 
     // MQTT sink setup from SPIFFS config
     mqtt_manager::MqttConfig mqc;
     mqtt_manager::load_config(mqc);
-    g_mqtt = new logging::mqtt_sink(mqc.host.c_str(), mqc.port, mqc.topic.c_str(), mqc.enabled,
+    g_mqtt_log_sink = new applog::MqttLogSink(mqc.host.c_str(), mqc.port, mqc.topic.c_str(), mqc.enabled,
                                     mqc.username.c_str(), mqc.password.c_str());
-    g_mqtt->begin();
-    logging::Logger::getInstance().addSink(std::unique_ptr<logging::log_sink>(g_mqtt));
+    g_mqtt_log_sink->begin();
+    applog::AppLogger::getInstance().addSink(std::unique_ptr<applog::LogSink>(g_mqtt_log_sink));
 
     #ifdef LOG_FORMAT_CSV
-    g_log_cfg.format = logging::LogFormat::CSV;
-    g_log_cfg.csv_print_header_once = true;
-    g_log_cfg.header_cells = logging::DEFAULT_MAX_CSV_CELLS;
-    g_log_cfg.header_temps = logging::DEFAULT_MAX_CSV_TEMPS;
+    g_data_log_cfg.format = datalog::Format::CSV;
+    g_data_log_cfg.csv_print_header_once = true;
+    g_data_log_cfg.header_cells = datalog::DEFAULT_MAX_CELLS;
+    g_data_log_cfg.header_temps = datalog::DEFAULT_MAX_TEMPS;
     #endif
 
     // Initialize timing variables
@@ -144,7 +144,7 @@ void loop()
             bool discharging_enabled = bms_interface->isDischargingEnabled(bms_interface->handle);
 
             // Emit via pluggable logger (Human or CSV)
-            logging::MeasurementSnapshot s{};
+            datalog::Snapshot s{};
             s.start_time_us = start_time;
             s.now_time_us = current_time;
             s.elapsed_sec = elapsed_sec;
@@ -180,21 +180,21 @@ void loop()
             // Populate arrays (bounded)
             {
                 int cells = cell_count;
-                if (cells > logging::DEFAULT_MAX_CSV_CELLS) cells = logging::DEFAULT_MAX_CSV_CELLS;
+                if (cells > datalog::DEFAULT_MAX_CELLS) cells = datalog::DEFAULT_MAX_CELLS;
                 for (int i = 0; i < cells; ++i) {
                     s.cell_v[static_cast<size_t>(i)] = bms_interface->getCellVoltage(bms_interface->handle, i);
                 }
             }
             {
                 int temps = temp_count;
-                if (temps > logging::DEFAULT_MAX_CSV_TEMPS) temps = logging::DEFAULT_MAX_CSV_TEMPS;
+                if (temps > datalog::DEFAULT_MAX_TEMPS) temps = datalog::DEFAULT_MAX_TEMPS;
                 for (int i = 0; i < temps; ++i) {
                     s.temp_c[static_cast<size_t>(i)] = bms_interface->getTemperature(bms_interface->handle, i);
                 }
             }
 
             // Configure CSV header counts once (auto-detect or build-time override) before first emission
-            if (g_log_cfg.format == logging::LogFormat::CSV && !g_csv_header_configured) {
+            if (g_data_log_cfg.format == datalog::Format::CSV && !g_csv_header_configured) {
                 int hc =
                 #ifdef LOG_CSV_CELLS
                     LOG_CSV_CELLS;
@@ -202,7 +202,7 @@ void loop()
                     cell_count;
                 #endif
                 if (hc < 0) hc = 0;
-                if (hc > logging::DEFAULT_MAX_CSV_CELLS) hc = logging::DEFAULT_MAX_CSV_CELLS;
+                if (hc > datalog::DEFAULT_MAX_CELLS) hc = datalog::DEFAULT_MAX_CELLS;
 
                 int ht =
                 #ifdef LOG_CSV_TEMPS
@@ -211,55 +211,55 @@ void loop()
                     temp_count;
                 #endif
                 if (ht < 0) ht = 0;
-                if (ht > logging::DEFAULT_MAX_CSV_TEMPS) ht = logging::DEFAULT_MAX_CSV_TEMPS;
+                if (ht > datalog::DEFAULT_MAX_TEMPS) ht = datalog::DEFAULT_MAX_TEMPS;
 
-                g_log_cfg.header_cells = hc;
-                g_log_cfg.header_temps = ht;
+                g_data_log_cfg.header_cells = hc;
+                g_data_log_cfg.header_temps = ht;
                 g_csv_header_configured = true;
             }
 
             // Emit to Serial
-            // logging::log_emit(s, g_log_cfg);
+            // datalog::emit(s, g_data_log_cfg);
             // Instead of direct serial output, use our new logging system
-            if (g_log_cfg.format == logging::LogFormat::Human) {
+            if (g_data_log_cfg.format == datalog::Format::Human) {
                 // For human format, we'll create a string representation
                 char buffer[512];
                 snprintf(buffer, sizeof(buffer), 
                          "V: %.2fV, I: %.2fA, SOC: %.1f%%, P: %.2fW", 
                          s.pack_voltage_v, s.pack_current_a, s.soc_pct, s.power_w);
-                LOG_INFO(logging::LogFacility::DATA_LOG, "%s", buffer);
+                APPLOG_INFO(applog::LogFacility::DATA_LOG, "%s", buffer);
             } else {
-                logging::log_emit(s, g_log_cfg);
+                datalog::emit(s, g_data_log_cfg);
             }
             // Emit to MQTT if configured (CSV line)
-            if (g_log_cfg.format == logging::LogFormat::CSV && g_mqtt) {
+            if (g_data_log_cfg.format == datalog::Format::CSV && g_mqtt_log_sink) {
                 String line;
                 // Build CSV row compatible with header counts
-                format_csv_row(line, s, g_log_cfg);
-                g_mqtt->write(line);
-            } else if (g_log_cfg.format == logging::LogFormat::CSV) {
+                datalog::format_csv_row(line, s, g_data_log_cfg);
+                g_mqtt_log_sink->write(line);
+            } else if (g_data_log_cfg.format == datalog::Format::CSV) {
                 // If MQTT is not configured, log to our new system
                 String line;
-                format_csv_row(line, s, g_log_cfg);
-                LOG_INFO(logging::LogFacility::DATA_LOG, "%s", line.c_str());
+                datalog::format_csv_row(line, s, g_data_log_cfg);
+                APPLOG_INFO(applog::LogFacility::DATA_LOG, "%s", line.c_str());
             }
 
         } else {
-            LOG_ERROR(logging::LogFacility::BMS_COMM, "Failed to read BMS data");
+            APPLOG_ERROR(applog::LogFacility::BMS_COMM, "Failed to read BMS data");
         }
 
         // Service MQTT client
-        if (g_mqtt) g_mqtt->tick();
+        if (g_mqtt_log_sink) g_mqtt_log_sink->tick();
 
         // Periodic MQTT diagnostics (every ~10s)
         static uint32_t last_diag = 0;
         uint32_t now_ms = millis();
         if (now_ms - last_diag > 10000) {
             last_diag = now_ms;
-            if (g_mqtt) {
-                LOG_INFO(logging::LogFacility::MQTT, "ok=%lu fail=%lu drop=%lu reconnects=%lu state=%ld",
-                         g_mqtt->publish_ok(), g_mqtt->publish_fail(), g_mqtt->dropped(),
-                         g_mqtt->reconnect_attempts(), g_mqtt->last_state());
+            if (g_mqtt_log_sink) {
+                APPLOG_INFO(applog::LogFacility::MQTT, "ok=%lu fail=%lu drop=%lu reconnects=%lu state=%ld",
+                         g_mqtt_log_sink->publish_ok(), g_mqtt_log_sink->publish_fail(), g_mqtt_log_sink->dropped(),
+                         g_mqtt_log_sink->reconnect_attempts(), g_mqtt_log_sink->last_state());
             }
         }
         // Wait before next reading

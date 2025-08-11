@@ -5,16 +5,16 @@
 #include <functional>
 #include <string>
 
-namespace logging
-{
+namespace applog {
+
 // Forward declarations
 enum class LogLevel;
 enum class LogFacility;
 
-class log_sink
+class LogSink
 {
 public:
-    virtual ~log_sink() = default;
+    virtual ~LogSink() = default;
     virtual void begin() = 0;
     virtual void tick() {}
     virtual void write(const String& line) = 0;
@@ -27,6 +27,7 @@ public:
         write(message);
     }
 };
-}
 
-#endif
+} // namespace applog
+
+#endif // LOG_SINK_H

@@ -1,16 +1,16 @@
-#ifndef MQTT_SINK_H
-#define MQTT_SINK_H
+#ifndef MQTT_LOG_SINK_H
+#define MQTT_LOG_SINK_H
 
 #include <Arduino.h>
 #include "log_sink.h"
-#include "logger.h"
+#include "applog.h"
 
-namespace logging
-{
-class mqtt_sink : public log_sink
+namespace applog {
+
+class MqttLogSink : public LogSink
 {
 public:
-    mqtt_sink(const char* host, uint16_t port, const char* topic, bool enabled = true, const char* username = nullptr, const char* password = nullptr);
+    MqttLogSink(const char* host, uint16_t port, const char* topic, bool enabled = true, const char* username = nullptr, const char* password = nullptr);
     void begin() override;
     void tick() override;
     void write(const String& line) override;
@@ -49,6 +49,7 @@ private:
     String username_s_;
     String password_s_;
 };
-}
 
-#endif
+} // namespace applog
+
+#endif // MQTT_LOG_SINK_H

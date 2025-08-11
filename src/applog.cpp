@@ -1,37 +1,37 @@
-#include "logger.h"
+#include "applog.h"
 #include "log_sink.h"
 #include <cstdarg>
 #include <memory>
 
-namespace logging {
+namespace applog {
 
-Logger& Logger::getInstance() {
-    static Logger instance;
+AppLogger& AppLogger::getInstance() {
+    static AppLogger instance;
     return instance;
 }
 
-Logger::Logger() : minLevel_(LogLevel::INFO) {
+AppLogger::AppLogger() : minLevel_(LogLevel::INFO) {
     // Enable all facilities by default
     enabledFacilities_.set();
 }
 
-void Logger::setLogLevel(LogLevel level) {
+void AppLogger::setLogLevel(LogLevel level) {
     minLevel_ = level;
 }
 
-void Logger::enableFacility(LogFacility facility, bool enabled) {
+void AppLogger::enableFacility(LogFacility facility, bool enabled) {
     enabledFacilities_.set(static_cast<size_t>(facility), enabled);
 }
 
-bool Logger::isFacilityEnabled(LogFacility facility) const {
+bool AppLogger::isFacilityEnabled(LogFacility facility) const {
     return enabledFacilities_.test(static_cast<size_t>(facility));
 }
 
-bool Logger::isLevelEnabled(LogLevel level) const {
+bool AppLogger::isLevelEnabled(LogLevel level) const {
     return static_cast<int>(level) >= static_cast<int>(minLevel_);
 }
 
-const char* Logger::getFacilityName(LogFacility facility) const {
+const char* AppLogger::getFacilityName(LogFacility facility) const {
     switch (facility) {
         case LogFacility::MAIN: return "MAIN";
         case LogFacility::MQTT: return "MQTT";
@@ -43,7 +43,7 @@ const char* Logger::getFacilityName(LogFacility facility) const {
     }
 }
 
-const char* Logger::getLevelName(LogLevel level) const {
+const char* AppLogger::getLevelName(LogLevel level) const {
     switch (level) {
         case LogLevel::DEBUG: return "DEBUG";
         case LogLevel::INFO: return "INFO";
@@ -53,7 +53,7 @@ const char* Logger::getLevelName(LogLevel level) const {
     }
 }
 
-void Logger::log(LogLevel level, LogFacility facility, const char* format, ...) {
+void AppLogger::log(LogLevel level, LogFacility facility, const char* format, ...) {
     // Check if this log should be processed
     if (!isLevelEnabled(level) || !isFacilityEnabled(facility)) {
         return;
@@ -76,10 +76,10 @@ void Logger::log(LogLevel level, LogFacility facility, const char* format, ...) 
     }
 }
 
-void Logger::addSink(std::unique_ptr<log_sink> sink) {
+void AppLogger::addSink(std::unique_ptr<LogSink> sink) {
     if (sink) {
         sinks_.push_back(std::move(sink));
     }
 }
 
-} // namespace logging
+} // namespace applog

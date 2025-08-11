@@ -1,36 +1,40 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <PubSubClient.h>
-#include "mqtt_sink.h"
-#include "logger.h"
+#include "mqtt_log_sink.h"
 
 namespace {
 WiFiClient g_wifi_client;
 PubSubClient g_mqtt(g_wifi_client);
 }
 
-namespace logging {
+namespace applog {
 
-mqtt_sink::mqtt_sink(const char* host, uint16_t port, const char* topic, bool enabled, const char* username, const char* password)
-: port_(port), enabled_(enabled)
+MqttLogSink::MqttLogSink(const char* host, uint16_t port, const char* topic, bool enabled, const char* username, const char* password)
+    : port_(port), enabled_(enabled)
 {
     if (host) host_s_ = host;
     if (topic) topic_s_ = topic;
     if (username) username_s_ = username;
     if (password) password_s_ = password;
+    
+    // Initialize buffer pointers
+    for (size_t i = 0; i < BUFFER_SIZE; ++i) {
+        message_buffer_[i] = "";
+    }
 }
 
-void mqtt_sink::begin()
+void MqttLogSink::begin()
 {
     if (!enabled_) return;
     g_mqtt.setServer(host_s_.c_str(), port_);
     g_mqtt.setSocketTimeout(2); // seconds, keep operations short
-    LOG_INFO(LogFacility::MQTT, "config host=%s port=%u topic=%s enabled=%d user=%s",
-             host_s_.c_str(), (unsigned)port_, topic_s_.c_str(), enabled_ ? 1 : 0,
-             (username_s_.length() ? "set" : "none"));
+    Serial.printf("[MQTT] config host=%s port=%u topic=%s enabled=%d user=%s\n",
+                  host_s_.c_str(), (unsigned)port_, topic_s_.c_str(), enabled_ ? 1 : 0,
+                  (username_s_.length() ? "set" : "none"));
 }
 
-bool mqtt_sink::ensure_connected()
+bool MqttLogSink::ensure_connected()
 {
     if (!enabled_) return false;
     if (g_mqtt.connected()) {
@@ -53,15 +57,14 @@ bool mqtt_sink::ensure_connected()
     IPAddress resolved;
     bool dns_ok = WiFi.hostByName(host_s_.c_str(), resolved);
     if (!dns_ok) {
-        LOG_ERROR(LogFacility::MQTT, "DNS failed for host=%s (WiFi=%d RSSI=%d)", 
-                  host_s_.c_str(), (int)wst, (int)rssi);
+        Serial.printf("[MQTT] DNS failed for host=%s (WiFi=%d RSSI=%d)\n", host_s_.c_str(), (int)wst, (int)rssi);
         last_state_ = -2; // network fail
         return false;
     }
 
-    LOG_INFO(LogFacility::MQTT, "connecting to %s (%s):%u user=%s WiFi=%d RSSI=%d t=%lu",
-             host_s_.c_str(), resolved.toString().c_str(), (unsigned)port_,
-             (username_s_.length() ? "set" : "none"), (int)wst, (int)rssi, now);
+    Serial.printf("[MQTT] connecting to %s (%s):%u user=%s WiFi=%d RSSI=%d t=%lu\n",
+                  host_s_.c_str(), resolved.toString().c_str(), (unsigned)port_,
+                  (username_s_.length() ? "set" : "none"), (int)wst, (int)rssi, now);
 
     String client_id = String("esp32-bms-") + String((uint32_t)ESP.getEfuseMac(), HEX);
     unsigned long t0 = millis();
@@ -73,8 +76,7 @@ bool mqtt_sink::ensure_connected()
     }
     unsigned long dt = millis() - t0;
     last_state_ = g_mqtt.state();
-    LOG_INFO(LogFacility::MQTT, "connect result ok=%d state=%ld elapsed=%lums", 
-             ok ? 1 : 0, last_state_, dt);
+    Serial.printf("[MQTT] connect result ok=%d state=%ld elapsed=%lums\n", ok ? 1 : 0, last_state_, dt);
     
     // If we just connected, flush any buffered messages
     if (ok) {
@@ -84,7 +86,7 @@ bool mqtt_sink::ensure_connected()
     return ok;
 }
 
-void mqtt_sink::flush_buffer()
+void MqttLogSink::flush_buffer()
 {
     // Publish all buffered messages
     while (buffer_count_ > 0) {
@@ -103,7 +105,7 @@ void mqtt_sink::flush_buffer()
     }
 }
 
-void mqtt_sink::tick()
+void MqttLogSink::tick()
 {
     if (!enabled_) return;
     // Try a quick connect if backoff allows, then process network
@@ -111,9 +113,8 @@ void mqtt_sink::tick()
     g_mqtt.loop();
 }
 
-void mqtt_sink::write(const String& line)
+void MqttLogSink::write(const String& line)
 {
-    // This is for data logging messages
     if (!enabled_) return;
     
     if (!g_mqtt.connected()) {
@@ -143,14 +144,10 @@ void mqtt_sink::write(const String& line)
     }
 }
 
-void mqtt_sink::write(LogLevel level, LogFacility facility, const String& message)
-{
-    // Forward logging messages to the standard write method
-    // For now, we'll just ignore log messages sent to the MQTT sink
-    // In the future, we could implement a separate MQTT topic for logs
-    (void)level;
-    (void)facility;
-    (void)message;
+void MqttLogSink::write(LogLevel level, LogFacility facility, const String& message) {
+    // For application logs, we'll format them differently than data logs
+    // For now, we'll just send the message as-is
+    write(message);
 }
 
-} // namespace logging
+} // namespace applog

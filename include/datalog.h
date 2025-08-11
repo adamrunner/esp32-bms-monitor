@@ -1,35 +1,35 @@
-#ifndef LOGGING_H
-#define LOGGING_H
+#ifndef DATALOG_H
+#define DATALOG_H
 
 #include <array>
 #include <cstdint>
 
-namespace logging
+namespace datalog
 {
 
 // Compile-time defaults
-constexpr int DEFAULT_MAX_CSV_CELLS = 16;
-constexpr int DEFAULT_MAX_CSV_TEMPS = 8;
+constexpr int DEFAULT_MAX_CELLS = 16;
+constexpr int DEFAULT_MAX_TEMPS = 8;
 
-enum class LogFormat
+enum class Format
 {
     Human = 0,
     CSV   = 1
 };
 
-struct LogConfig
+struct Config
 {
 #ifdef LOG_FORMAT_CSV
-    LogFormat format { LogFormat::CSV };
+    Format format { Format::CSV };
 #else
-    LogFormat format { LogFormat::Human };
+    Format format { Format::Human };
 #endif
     bool csv_print_header_once { true };
-    int header_cells { DEFAULT_MAX_CSV_CELLS };
-    int header_temps { DEFAULT_MAX_CSV_TEMPS };
+    int header_cells { DEFAULT_MAX_CELLS };
+    int header_temps { DEFAULT_MAX_TEMPS };
 };
 
-struct MeasurementSnapshot
+struct Snapshot
 {
     // Timing
     uint64_t start_time_us { 0 };
@@ -71,16 +71,16 @@ struct MeasurementSnapshot
     bool discharging_enabled { false };
 
     // Arrays (fixed for CSV; human may still print up to these)
-    std::array<float, DEFAULT_MAX_CSV_CELLS> cell_v{};
-    std::array<float, DEFAULT_MAX_CSV_TEMPS> temp_c{};
+    std::array<float, DEFAULT_MAX_CELLS> cell_v{};
+    std::array<float, DEFAULT_MAX_TEMPS> temp_c{};
 };
 
-// Emit one log record in the configured format to the current stdout/serial
-void log_emit(const MeasurementSnapshot& s, const LogConfig& cfg);
+// Emit one data record in the configured format to the current stdout/serial
+void emit(const Snapshot& s, const Config& cfg);
 
 // Utility: format a CSV row into a String (no newline)
-void format_csv_row(String& out, const MeasurementSnapshot& s, const LogConfig& cfg);
+void format_csv_row(String& out, const Snapshot& s, const Config& cfg);
 
-} // namespace logging
+} // namespace datalog
 
-#endif // LOGGING_H
+#endif // DATALOG_H

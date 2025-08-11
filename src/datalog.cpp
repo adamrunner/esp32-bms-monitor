@@ -1,23 +1,23 @@
 #include <Arduino.h>
 #include <cmath>
-#include "logging.h"
+#include "datalog.h"
 
-namespace logging
+namespace datalog
 {
 
 static bool g_csv_header_printed = false;
 
 static inline int clamp_cells(int requested)
 {
-    return requested > DEFAULT_MAX_CSV_CELLS ? DEFAULT_MAX_CSV_CELLS : (requested < 0 ? 0 : requested);
+    return requested > DEFAULT_MAX_CELLS ? DEFAULT_MAX_CELLS : (requested < 0 ? 0 : requested);
 }
 
 static inline int clamp_temps(int requested)
 {
-    return requested > DEFAULT_MAX_CSV_TEMPS ? DEFAULT_MAX_CSV_TEMPS : (requested < 0 ? 0 : requested);
+    return requested > DEFAULT_MAX_TEMPS ? DEFAULT_MAX_TEMPS : (requested < 0 ? 0 : requested);
 }
 
-static void print_human(const MeasurementSnapshot& s, const LogConfig& cfg)
+static void print_human(const Snapshot& s, const Config& cfg)
 {
     (void)cfg; // unused for now
 
@@ -56,7 +56,7 @@ static void print_human(const MeasurementSnapshot& s, const LogConfig& cfg)
     }
 }
 
-static void print_csv_header(const LogConfig& cfg)
+static void print_csv_header(const Config& cfg)
 {
     Serial.printf("elapsed_seconds,elapsed_hms,total_energy_wh,pack_voltage_v,pack_current_a,state_of_charge_pct,");
     Serial.printf("power_w,full_capacity_ah,peak_current_a,peak_power_w,cell_count,");
@@ -76,7 +76,7 @@ static void print_csv_header(const LogConfig& cfg)
     Serial.printf("\n");
 }
 
-void format_csv_row(String& out, const MeasurementSnapshot& s, const LogConfig& cfg)
+void format_csv_row(String& out, const Snapshot& s, const Config& cfg)
 {
     char buf[64];
     snprintf(buf, sizeof(buf), "%u,%02u:%02u:%02u,%.3f,%.2f,%.2f,%.1f,%.2f,",
@@ -133,9 +133,9 @@ void format_csv_row(String& out, const MeasurementSnapshot& s, const LogConfig& 
     }
 }
 
-void log_emit(const MeasurementSnapshot& s, const LogConfig& cfg)
+void emit(const Snapshot& s, const Config& cfg)
 {
-    if (cfg.format == LogFormat::CSV) {
+    if (cfg.format == Format::CSV) {
         if (cfg.csv_print_header_once && !g_csv_header_printed) {
             print_csv_header(cfg);
             g_csv_header_printed = true;
@@ -148,6 +148,4 @@ void log_emit(const MeasurementSnapshot& s, const LogConfig& cfg)
     }
 }
 
-} // namespace logging
-
-
+} // namespace datalog
