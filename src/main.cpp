@@ -245,6 +245,18 @@ void loop()
 
         // Service MQTT client
         if (g_mqtt) g_mqtt->tick();
+
+        // Periodic MQTT diagnostics (every ~10s)
+        static uint32_t last_diag = 0;
+        uint32_t now_ms = millis();
+        if (now_ms - last_diag > 10000) {
+            last_diag = now_ms;
+            if (g_mqtt) {
+                Serial.printf("[MQTT] ok=%lu fail=%lu drop=%lu reconnects=%lu state=%ld\n",
+                              g_mqtt->publish_ok(), g_mqtt->publish_fail(), g_mqtt->dropped(),
+                              g_mqtt->reconnect_attempts(), g_mqtt->last_state());
+            }
+        }
         // Wait before next reading
         delay(READ_INTERVAL_MS);
 }
