@@ -3,6 +3,8 @@
 ## Project Overview
 ESP32-based Battery Management System (BMS) monitor supporting multiple BMS types with abstraction layer architecture. Initially supporting Daly BMS and JBD BMS units.
 
+Framework: Arduino (migrated from ESP-IDF). Build with PlatformIO `[env:esp32dev]`.
+
 ## Architecture
 
 ### 1. Core Abstraction Layer
@@ -51,8 +53,8 @@ protected:
 ### 2. Implementation Strategy
 
 **Daly BMS Implementation (`lib/daly_bms/`):**
-- Adapt Arduino C++ library for ESP-IDF
-- Convert HardwareSerial to ESP-IDF UART driver
+- Use Arduino framework HardwareSerial under PlatformIO
+- No ESP-IDF UART driver shim needed after migration
 - Maintain same data structures and command set
 - Add peak tracking functionality
 
@@ -106,7 +108,7 @@ struct BMSLogEntry {
 };
 ```
 
-### 5. Main Application Flow
+### 5. Main Application Flow (Arduino)
 
 The `src/main.cpp` will:
 1. (Future) Auto-detect connected BMS type
@@ -140,7 +142,7 @@ The `src/main.cpp` will:
 - **Commands**: Read/write registers for different data types
 - **Data Handling**: Float conversions and bit manipulation for protection flags
 
-## Implementation Status
+## Implementation Status (updated for Arduino)
 - [x] Create project architecture files
 - [x] Implement BMS abstraction interface
 - [x] Adapt Daly BMS library for ESP-IDF
@@ -151,12 +153,23 @@ The `src/main.cpp` will:
 - [x] Configure serial output for monitoring
 - [x] Test with actual BMS hardware
 - [x] Figure out state of charge for JBD BMS
-- [ ] (Future) Implement BMS sniffing to automatically detect connected BMS type
+- [x] Wifi connectivity
+- [ ] Implement time synchronization
+- [x] MQTT integration, modular log sink layer
+- [ ] OTA Firmware Upload
+- [ ] Additional log sinks (TCP/UDP, HTTP client/server, WebSocket)
 - [ ] (Future) Implement SD card data logging
+- [ ] (Future) HTTP POST log sink (JSON payloads)
+- [ ] (Future) WebSocket log sink
+- [ ] (Future) Implement BMS sniffing to automatically detect connected BMS type
 - [ ] (Future) Add display support for new ESP32 module
 
 ## Next Steps
-1. Create header files for BMS interface
-2. Set up Daly BMS library adaptation
-3. Implement JBD protocol from reference code
-4. Build main application structure
+1. Add runtime MQTT toggle (serial command or GPIO) and status output
+2. Add JSON payload option alongside CSV (build flag or runtime)
+3. Add additional sinks: TCP/UDP client, HTTP POST, HTTP server, WebSocket
+4. Time sync (NTP) to timestamp records; include in payloads
+5. Persist config (SPIFFS) for Wi‑Fi and MQTT params; simple provisioning
+6. OTA firmware update via ArduinoOTA or HTTP server endpoint
+7. Enhance auto-detect BMS type; add fallback selection via serial menu
+8. Add basic unit tests for CSV/JSON formatting helpers
