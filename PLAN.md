@@ -156,6 +156,11 @@ The `src/main.cpp` will:
 - [x] Wifi connectivity
 - [ ] Implement time synchronization
 - [x] MQTT integration, modular log sink layer
+<<<<<<< HEAD
+=======
+- [ ] SD Card Buffering and storage for offline periods
+- [ ] Alternative time sources (other than NTP)
+>>>>>>> port-to-arduino
 - [ ] OTA Firmware Upload
 - [ ] Additional log sinks (TCP/UDP, HTTP client/server, WebSocket)
 - [ ] (Future) Implement SD card data logging
