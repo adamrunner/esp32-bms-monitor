@@ -9,7 +9,7 @@ namespace logging
 class mqtt_sink : public log_sink
 {
 public:
-    mqtt_sink(const char* host, uint16_t port, const char* topic, bool enabled = true);
+    mqtt_sink(const char* host, uint16_t port, const char* topic, bool enabled = true, const char* username = nullptr, const char* password = nullptr);
     void begin() override;
     void tick() override;
     void write(const String& line) override;
@@ -35,6 +35,8 @@ private:
     unsigned long publish_ok_ {0};
     unsigned long publish_fail_ {0};
     unsigned long dropped_ {0};
+    const char* username_ {nullptr};
+    const char* password_ {nullptr};
 };
 }
 

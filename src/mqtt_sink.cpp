@@ -10,8 +10,12 @@ PubSubClient g_mqtt(g_wifi_client);
 
 namespace logging {
 
-mqtt_sink::mqtt_sink(const char* host, uint16_t port, const char* topic, bool enabled)
-: host_(host), port_(port), topic_(topic), enabled_(enabled) {}
+mqtt_sink::mqtt_sink(const char* host, uint16_t port, const char* topic, bool enabled, const char* username, const char* password)
+: host_(host), port_(port), topic_(topic), enabled_(enabled)
+{
+    username_ = username;
+    password_ = password;
+}
 
 void mqtt_sink::begin()
 {
@@ -34,7 +38,12 @@ bool mqtt_sink::ensure_connected()
     reconnect_attempts_++;
 
     String client_id = String("esp32-bms-") + String((uint32_t)ESP.getEfuseMac(), HEX);
-    bool ok = g_mqtt.connect(client_id.c_str());
+    bool ok;
+    if (username_ && username_[0] != '\0') {
+        ok = g_mqtt.connect(client_id.c_str(), username_, (password_ ? password_ : ""));
+    } else {
+        ok = g_mqtt.connect(client_id.c_str());
+    }
     last_state_ = g_mqtt.state();
     return ok;
 }

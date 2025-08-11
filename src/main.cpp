@@ -6,6 +6,7 @@
 #include "logging.h"
 #include "wifi_manager.h"
 #include "mqtt_sink.h"
+#include "mqtt_manager.h"
 
 static constexpr uint32_t READ_INTERVAL_MS = 1000;
 
@@ -68,32 +69,11 @@ void setup()
         Serial.println("WiFi initialization failed");
     }
 
-    // MQTT sink setup (configurable via build flags)
-    const char* mqtt_host =
-    #ifdef MQTT_HOST
-        MQTT_HOST;
-    #else
-        "192.168.1.218";
-    #endif
-    const uint16_t mqtt_port =
-    #ifdef MQTT_PORT
-        MQTT_PORT;
-    #else
-        1883;
-    #endif
-    const char* mqtt_topic =
-    #ifdef MQTT_TOPIC
-        MQTT_TOPIC;
-    #else
-        "bms/telemetry";
-    #endif
-    const bool mqtt_enabled =
-    #ifdef MQTT_ENABLED
-        true;
-    #else
-        true;
-    #endif
-    g_mqtt = new logging::mqtt_sink(mqtt_host, mqtt_port, mqtt_topic, mqtt_enabled);
+    // MQTT sink setup from SPIFFS config
+    mqtt_manager::MqttConfig mqc;
+    mqtt_manager::load_config(mqc);
+    g_mqtt = new logging::mqtt_sink(mqc.host.c_str(), mqc.port, mqc.topic.c_str(), mqc.enabled,
+                                    mqc.username.c_str(), mqc.password.c_str());
     g_mqtt->begin();
 
     #ifdef LOG_FORMAT_CSV
