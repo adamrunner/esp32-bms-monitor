@@ -173,3 +173,47 @@ The `src/main.cpp` will:
 6. OTA firmware update via ArduinoOTA or HTTP server endpoint
 7. Enhance auto-detect BMS type; add fallback selection via serial menu
 8. Add basic unit tests for CSV/JSON formatting helpers
+
+## MQTT Buffering Implementation Notes
+
+### Current Implementation
+- Implemented a ring buffer in `mqtt_sink` class to store up to 10 messages while waiting for MQTT to connect
+- When MQTT is not connected, instead of dropping messages, we now store them in the buffer
+- When MQTT connects, we flush all buffered messages to the broker
+- If the buffer fills up, we drop the oldest messages to make room for new ones
+
+### Future SD Card Extension
+The current implementation is modular and sets a good foundation for extending to SD card buffering:
+
+1. **Modular Design Benefits**:
+   - Uses pluggable logging architecture with `log_sink` as a base class
+   - Current buffering logic is contained within `mqtt_sink`
+   - Base `log_sink` interface remains unchanged
+   - Other sinks (like serial output) are unaffected
+
+2. **Proposed Enhanced Architecture**:
+```
+log_sink (base class)
+├── serial_sink
+├── mqtt_sink (current implementation)
+├── sd_card_sink (future implementation)
+└── buffered_mqtt_sink (combines SD card + MQTT buffering)
+```
+
+3. **SD Card Extension Implementation Plan**:
+   - Create an `sd_card_sink` class that implements `log_sink` for local storage
+   - Create a `buffered_mqtt_sink` that combines both SD card storage and MQTT publishing
+   - Implement a buffer manager that can handle both in-memory and on-disk buffering
+
+4. **Buffered MQTT Sink Features**:
+   - Store all messages to SD card immediately for persistence
+   - Also store in memory ring buffer for immediate publishing when online
+   - When MQTT connects, first send buffered messages from memory
+   - Then process SD card backlog (with appropriate rate limiting)
+   - Allow configurable retention policies for SD card data
+
+5. **Benefits of SD Card Extension**:
+   - Persistent storage of all messages regardless of connectivity
+   - Immediate publishing when online
+   - Eventually consistent delivery of all historical data
+   - Ability to retain logs on SD card even after uploading to MQTT

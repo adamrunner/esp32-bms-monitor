@@ -32,7 +32,11 @@ void mqtt_sink::begin()
 bool mqtt_sink::ensure_connected()
 {
     if (!enabled_) return false;
-    if (g_mqtt.connected()) return true;
+    if (g_mqtt.connected()) {
+        // If we just connected, flush any buffered messages
+        flush_buffer();
+        return true;
+    }
 
     const unsigned long now = millis();
     // Only attempt every 5 seconds to avoid blocking loop
@@ -68,7 +72,32 @@ bool mqtt_sink::ensure_connected()
     unsigned long dt = millis() - t0;
     last_state_ = g_mqtt.state();
     Serial.printf("[MQTT] connect result ok=%d state=%ld elapsed=%lums\n", ok ? 1 : 0, last_state_, dt);
+    
+    // If we just connected, flush any buffered messages
+    if (ok) {
+        flush_buffer();
+    }
+    
     return ok;
+}
+
+void mqtt_sink::flush_buffer()
+{
+    // Publish all buffered messages
+    while (buffer_count_ > 0) {
+        String& message = message_buffer_[buffer_tail_];
+        if (g_mqtt.publish(topic_s_.c_str(), message.c_str(), false)) {
+            publish_ok_++;
+        } else {
+            publish_fail_++;
+            last_state_ = g_mqtt.state();
+            break; // Stop on failure
+        }
+        
+        // Move tail pointer
+        buffer_tail_ = (buffer_tail_ + 1) % BUFFER_SIZE;
+        buffer_count_--;
+    }
 }
 
 void mqtt_sink::tick()
@@ -82,11 +111,26 @@ void mqtt_sink::tick()
 void mqtt_sink::write(const String& line)
 {
     if (!enabled_) return;
+    
     if (!g_mqtt.connected()) {
-        dropped_++;
-        return; // never block waiting to connect
+        // Add message to buffer instead of dropping it
+        if (buffer_count_ < BUFFER_SIZE) {
+            // Add to buffer
+            message_buffer_[buffer_head_] = line;
+            buffer_head_ = (buffer_head_ + 1) % BUFFER_SIZE;
+            buffer_count_++;
+        } else {
+            // Buffer is full, drop the oldest message
+            buffer_tail_ = (buffer_tail_ + 1) % BUFFER_SIZE;
+            // Add new message
+            message_buffer_[buffer_head_] = line;
+            buffer_head_ = (buffer_head_ + 1) % BUFFER_SIZE;
+            dropped_++;
+        }
+        return;
     }
-    // Publish and record result; do not retry synchronously
+    
+    // MQTT is connected, publish directly
     if (g_mqtt.publish(topic_s_.c_str(), line.c_str(), false)) {
         publish_ok_++;
     } else {
