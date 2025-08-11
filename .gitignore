@@ -8,3 +8,4 @@ examples
 # WiFi configuration files
 data/wifi_config.txt
 wifi_config.txt
+data/mqtt_config.txt

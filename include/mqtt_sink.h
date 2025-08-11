@@ -23,9 +23,9 @@ public:
 
 private:
     bool ensure_connected();
-    const char* host_;
+    String host_s_;
     uint16_t port_;
-    const char* topic_;
+    String topic_s_;
     bool enabled_;
 
     // Counters and timing
@@ -35,8 +35,8 @@ private:
     unsigned long publish_ok_ {0};
     unsigned long publish_fail_ {0};
     unsigned long dropped_ {0};
-    const char* username_ {nullptr};
-    const char* password_ {nullptr};
+    String username_s_;
+    String password_s_;
 };
 }
 

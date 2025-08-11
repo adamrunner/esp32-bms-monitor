@@ -40,7 +40,7 @@ ESP32 based Battery Management System monitor for Daly and JBD BMS units. Provid
 
 ## Setup
 
-### WiFi Configuration
+### WiFi Configuration and MQTT
 1. Copy `data/wifi_config.txt` and edit with your credentials:
    ```
    ssid=YOUR_WIFI_NETWORK_NAME
@@ -50,6 +50,22 @@ ESP32 based Battery Management System monitor for Daly and JBD BMS units. Provid
    ```
 
 2. Upload filesystem: `pio run -t uploadfs`
+
+### MQTT Configuration
+1. Copy `data/mqtt_config_example.txt` to `data/mqtt_config.txt` and edit:
+   ```
+   host=192.168.1.218
+   port=1883
+   topic=bms/telemetry
+   enabled=1
+   username=youruser
+   password=yourpass
+   ```
+2. Upload filesystem again if changed: `pio run -t uploadfs`
+
+Notes:
+- MQTT publishing is non-blocking; if disconnected, lines are dropped and counters are printed every ~10s.
+- CSV remains printed to Serial; JSON payloads may be added later.
 
 ### Build and Run (PlatformIO)
 - Build: `pio run`
@@ -63,6 +79,7 @@ ESP32 based Battery Management System monitor for Daly and JBD BMS units. Provid
 - `src/main.cpp`: Arduino setup()/loop() initializes and polls autodetected BMS, prints readings
 - `include/bms_interface.h`: C API for measurements and status
 - `include/wifi_manager.h`, `src/wifi_manager.cpp`: WiFi connectivity manager
+- `include/log_sink.h`, `include/mqtt_sink.h`, `src/mqtt_sink.cpp`: Modular logging sinks (MQTT publisher)
 - `lib/daly_bms/*`: Daly protocol, data structures, helpers
 - `lib/jbd_bms/*`: JBD packet protocol, parsing, protection flags
 - `data/wifi_config.txt`: WiFi credentials (excluded from git)
