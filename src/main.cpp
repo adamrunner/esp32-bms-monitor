@@ -9,6 +9,7 @@
 #include "mqtt_manager.h"
 #include "applog.h"
 #include "serial_log_sink.h"
+#include "time_manager.h"
 
 static constexpr uint32_t READ_INTERVAL_MS = 1000;
 
@@ -70,6 +71,19 @@ void setup()
     if (wifi_manager::initialize()) {
         if (wifi_manager::connect()) {
             APPLOG_INFO(applog::LogFacility::WIFI, "WiFi connected: %s", wifi_manager::getLocalIP().c_str());
+            
+            // Initialize and sync time
+            APPLOG_INFO(applog::LogFacility::SYSTEM, "Initializing time manager...");
+            if (time_manager::initialize()) {
+                APPLOG_INFO(applog::LogFacility::SYSTEM, "Time manager initialized, syncing time...");
+                if (time_manager::syncTime()) {
+                    APPLOG_INFO(applog::LogFacility::SYSTEM, "Time synchronized: %s", time_manager::getFormattedTime().c_str());
+                } else {
+                    APPLOG_WARN(applog::LogFacility::SYSTEM, "Failed to synchronize time");
+                }
+            } else {
+                APPLOG_ERROR(applog::LogFacility::SYSTEM, "Failed to initialize time manager");
+            }
         } else {
             APPLOG_ERROR(applog::LogFacility::WIFI, "WiFi connection failed: %s", wifi_manager::getStatusString().c_str());
         }
@@ -102,81 +116,82 @@ void loop()
 {
 
         // Read all BMS measurements
-        if (bms_interface->readMeasurements(bms_interface->handle)) {
-            // Get basic measurements
-            float voltage = bms_interface->getPackVoltage(bms_interface->handle);
-            float current = bms_interface->getPackCurrent(bms_interface->handle);
-            float soc = bms_interface->getStateOfCharge(bms_interface->handle);
-            float power = bms_interface->getPower(bms_interface->handle);
-            float full_capacity = bms_interface->getFullCapacity(bms_interface->handle);
+            if (bms_interface->readMeasurements(bms_interface->handle)) {
+                // Get basic measurements
+                float voltage = bms_interface->getPackVoltage(bms_interface->handle);
+                float current = bms_interface->getPackCurrent(bms_interface->handle);
+                float soc = bms_interface->getStateOfCharge(bms_interface->handle);
+                float power = bms_interface->getPower(bms_interface->handle);
+                float full_capacity = bms_interface->getFullCapacity(bms_interface->handle);
 
-            // Time and energy accumulation
-            uint64_t current_time = millis() * 1000;  // Convert to microseconds
-            double elapsed_us = (double)(current_time - last_time);
-            double elapsed_h = elapsed_us / 1e6 / 3600;
-            total_energy_wh += power * elapsed_h;
-            last_time = current_time;
-            // Calculate elapsed time since start
-            uint64_t total_elapsed_us = current_time - start_time;
-            unsigned int elapsed_sec = total_elapsed_us / 1000000;
-            unsigned int hours = elapsed_sec / 3600;
-            unsigned int minutes = (elapsed_sec % 3600) / 60;
-            unsigned int seconds = elapsed_sec % 60;
+                // Time and energy accumulation
+                uint64_t current_time = millis() * 1000;  // Convert to microseconds
+                double elapsed_us = (double)(current_time - last_time);
+                double elapsed_h = elapsed_us / 1e6 / 3600;
+                total_energy_wh += power * elapsed_h;
+                last_time = current_time;
+                // Calculate elapsed time since start
+                uint64_t total_elapsed_us = current_time - start_time;
+                unsigned int elapsed_sec = total_elapsed_us / 1000000;
+                unsigned int hours = elapsed_sec / 3600;
+                unsigned int minutes = (elapsed_sec % 3600) / 60;
+                unsigned int seconds = elapsed_sec % 60;
 
-            // Get cell information
-            int cell_count = bms_interface->getCellCount(bms_interface->handle);
-            float min_cell_voltage = bms_interface->getMinCellVoltage(bms_interface->handle);
-            float max_cell_voltage = bms_interface->getMaxCellVoltage(bms_interface->handle);
-            float cell_voltage_delta = bms_interface->getCellVoltageDelta(bms_interface->handle);
-            int min_cell_num = bms_interface->getMinCellNumber(bms_interface->handle);
-            int max_cell_num = bms_interface->getMaxCellNumber(bms_interface->handle);
+                // Get cell information
+                int cell_count = bms_interface->getCellCount(bms_interface->handle);
+                float min_cell_voltage = bms_interface->getMinCellVoltage(bms_interface->handle);
+                float max_cell_voltage = bms_interface->getMaxCellVoltage(bms_interface->handle);
+                float cell_voltage_delta = bms_interface->getCellVoltageDelta(bms_interface->handle);
+                int min_cell_num = bms_interface->getMinCellNumber(bms_interface->handle);
+                int max_cell_num = bms_interface->getMaxCellNumber(bms_interface->handle);
 
-            // Get temperature information
-            int temp_count = bms_interface->getTemperatureCount(bms_interface->handle);
-            float max_temp = bms_interface->getMaxTemperature(bms_interface->handle);
-            float min_temp = bms_interface->getMinTemperature(bms_interface->handle);
+                // Get temperature information
+                int temp_count = bms_interface->getTemperatureCount(bms_interface->handle);
+                float max_temp = bms_interface->getMaxTemperature(bms_interface->handle);
+                float min_temp = bms_interface->getMinTemperature(bms_interface->handle);
 
-            // Get peak values
-            float peak_current = bms_interface->getPeakCurrent(bms_interface->handle);
-            float peak_power = bms_interface->getPeakPower(bms_interface->handle);
+                // Get peak values
+                float peak_current = bms_interface->getPeakCurrent(bms_interface->handle);
+                float peak_power = bms_interface->getPeakPower(bms_interface->handle);
 
-            // Get MOSFET status
-            bool charging_enabled = bms_interface->isChargingEnabled(bms_interface->handle);
-            bool discharging_enabled = bms_interface->isDischargingEnabled(bms_interface->handle);
+                // Get MOSFET status
+                bool charging_enabled = bms_interface->isChargingEnabled(bms_interface->handle);
+                bool discharging_enabled = bms_interface->isDischargingEnabled(bms_interface->handle);
 
-            // Emit via pluggable logger (Human or CSV)
-            datalog::Snapshot s{};
-            s.start_time_us = start_time;
-            s.now_time_us = current_time;
-            s.elapsed_sec = elapsed_sec;
-            s.hours = hours;
-            s.minutes = minutes;
-            s.seconds = seconds;
+                // Emit via pluggable logger (Human or CSV)
+                datalog::Snapshot s{};
+                s.start_time_us = start_time;
+                s.now_time_us = current_time;
+                s.timestamp = time_manager::getUnixTimestamp(); // Add timestamp
+                s.elapsed_sec = elapsed_sec;
+                s.hours = hours;
+                s.minutes = minutes;
+                s.seconds = seconds;
 
-            s.total_energy_wh = total_energy_wh;
+                s.total_energy_wh = total_energy_wh;
 
-            s.pack_voltage_v = voltage;
-            s.pack_current_a = current;
-            s.soc_pct = soc;
-            s.power_w = power;
-            s.full_capacity_ah = static_cast<float>(full_capacity);
+                s.pack_voltage_v = voltage;
+                s.pack_current_a = current;
+                s.soc_pct = soc;
+                s.power_w = power;
+                s.full_capacity_ah = static_cast<float>(full_capacity);
 
-            s.peak_current_a = peak_current;
-            s.peak_power_w = peak_power;
+                s.peak_current_a = peak_current;
+                s.peak_power_w = peak_power;
 
-            s.cell_count = cell_count;
-            s.min_cell_voltage_v = min_cell_voltage;
-            s.max_cell_voltage_v = max_cell_voltage;
-            s.min_cell_num = min_cell_num;
-            s.max_cell_num = max_cell_num;
-            s.cell_voltage_delta_v = cell_voltage_delta;
+                s.cell_count = cell_count;
+                s.min_cell_voltage_v = min_cell_voltage;
+                s.max_cell_voltage_v = max_cell_voltage;
+                s.min_cell_num = min_cell_num;
+                s.max_cell_num = max_cell_num;
+                s.cell_voltage_delta_v = cell_voltage_delta;
 
-            s.temp_count = temp_count;
-            s.min_temp_c = min_temp;
-            s.max_temp_c = max_temp;
+                s.temp_count = temp_count;
+                s.min_temp_c = min_temp;
+                s.max_temp_c = max_temp;
 
-            s.charging_enabled = charging_enabled;
-            s.discharging_enabled = discharging_enabled;
+                s.charging_enabled = charging_enabled;
+                s.discharging_enabled = discharging_enabled;
 
             // Populate arrays (bounded)
             {

@@ -34,6 +34,7 @@ struct Snapshot
     // Timing
     uint64_t start_time_us { 0 };
     uint64_t now_time_us { 0 };
+    unsigned long timestamp { 0 }; // Unix timestamp
     unsigned elapsed_sec { 0 };
     unsigned hours { 0 };
     unsigned minutes { 0 };

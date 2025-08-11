@@ -58,7 +58,7 @@ static void print_human(const Snapshot& s, const Config& cfg)
 
 static void print_csv_header(const Config& cfg)
 {
-    Serial.printf("elapsed_seconds,elapsed_hms,total_energy_wh,pack_voltage_v,pack_current_a,state_of_charge_pct,");
+    Serial.printf("timestamp,elapsed_seconds,elapsed_hms,total_energy_wh,pack_voltage_v,pack_current_a,state_of_charge_pct,");
     Serial.printf("power_w,full_capacity_ah,peak_current_a,peak_power_w,cell_count,");
     Serial.printf("min_cell_voltage_v,min_cell_num,max_cell_voltage_v,max_cell_num,cell_voltage_delta_v,");
     Serial.printf("temp_count,min_temp_c,max_temp_c,charging_enabled,discharging_enabled");
@@ -79,6 +79,10 @@ static void print_csv_header(const Config& cfg)
 void format_csv_row(String& out, const Snapshot& s, const Config& cfg)
 {
     char buf[64];
+    // Add timestamp first
+    snprintf(buf, sizeof(buf), "%lu,", s.timestamp);
+    out += buf;
+    
     snprintf(buf, sizeof(buf), "%u,%02u:%02u:%02u,%.3f,%.2f,%.2f,%.1f,%.2f,",
              s.elapsed_sec, s.hours, s.minutes, s.seconds,
              s.total_energy_wh,
