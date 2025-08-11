@@ -10,13 +10,19 @@ PubSubClient g_mqtt(g_wifi_client);
 
 namespace applog {
 
-MqttLogSink::MqttLogSink(const char* host, uint16_t port, const char* topic, bool enabled, const char* username, const char* password)
+MqttLogSink::MqttLogSink(const char* host, uint16_t port, const char* topic, const char* data_topic, bool enabled, const char* username, const char* password)
     : port_(port), enabled_(enabled)
 {
     if (host) host_s_ = host;
     if (topic) topic_s_ = topic;
+    if (data_topic) data_topic_s_ = data_topic;
     if (username) username_s_ = username;
     if (password) password_s_ = password;
+    
+    // If data topic is not specified, use the same topic for both
+    if (data_topic_s_.length() == 0) {
+        data_topic_s_ = topic_s_;
+    }
     
     // Initialize buffer pointers
     for (size_t i = 0; i < BUFFER_SIZE; ++i) {
@@ -29,8 +35,8 @@ void MqttLogSink::begin()
     if (!enabled_) return;
     g_mqtt.setServer(host_s_.c_str(), port_);
     g_mqtt.setSocketTimeout(2); // seconds, keep operations short
-    Serial.printf("[MQTT] config host=%s port=%u topic=%s enabled=%d user=%s\n",
-                  host_s_.c_str(), (unsigned)port_, topic_s_.c_str(), enabled_ ? 1 : 0,
+    Serial.printf("[MQTT] config host=%s port=%u topic=%s data_topic=%s enabled=%d user=%s\n",
+                  host_s_.c_str(), (unsigned)port_, topic_s_.c_str(), data_topic_s_.c_str(), enabled_ ? 1 : 0,
                   (username_s_.length() ? "set" : "none"));
 }
 
@@ -135,7 +141,7 @@ void MqttLogSink::write(const String& line)
         return;
     }
     
-    // MQTT is connected, publish directly
+    // MQTT is connected, publish directly to the main topic
     if (g_mqtt.publish(topic_s_.c_str(), line.c_str(), false)) {
         publish_ok_++;
     } else {
@@ -146,8 +152,40 @@ void MqttLogSink::write(const String& line)
 
 void MqttLogSink::write(LogLevel level, LogFacility facility, const String& message) {
     // For application logs, we'll format them differently than data logs
-    // For now, we'll just send the message as-is
-    write(message);
+    // We'll only send certain types of logs to MQTT to avoid circular logging
+    if (facility == LogFacility::MQTT) {
+        // Don't send MQTT logs back to MQTT to avoid circular logging
+        return;
+    }
+    
+    // Format the message like the serial sink does
+    String formatted = "[";
+    formatted += applog::AppLogger::getInstance().getLevelName(level);
+    formatted += "][";
+    formatted += applog::AppLogger::getInstance().getFacilityName(facility);
+    formatted += "] ";
+    formatted += message;
+    
+    write(formatted);
+}
+
+bool MqttLogSink::publishDataLog(const String& line) {
+    if (!enabled_) return false;
+    
+    // Ensure we're connected
+    if (!ensure_connected()) {
+        return false;
+    }
+    
+    // Publish directly to the data topic
+    bool result = g_mqtt.publish(data_topic_s_.c_str(), line.c_str(), false);
+    if (result) {
+        publish_ok_++;
+    } else {
+        publish_fail_++;
+        last_state_ = g_mqtt.state();
+    }
+    return result;
 }
 
 } // namespace applog

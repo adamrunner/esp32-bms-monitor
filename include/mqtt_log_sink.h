@@ -10,11 +10,14 @@ namespace applog {
 class MqttLogSink : public LogSink
 {
 public:
-    MqttLogSink(const char* host, uint16_t port, const char* topic, bool enabled = true, const char* username = nullptr, const char* password = nullptr);
+    MqttLogSink(const char* host, uint16_t port, const char* topic, const char* data_topic, bool enabled = true, const char* username = nullptr, const char* password = nullptr);
     void begin() override;
     void tick() override;
     void write(const String& line) override;
     void write(LogLevel level, LogFacility facility, const String& message) override;
+    
+    // Method to send data logs directly to MQTT
+    bool publishDataLog(const String& line);
 
     // Diagnostics
     unsigned long reconnect_attempts() const { return reconnect_attempts_; }
@@ -30,6 +33,7 @@ private:
     String host_s_;
     uint16_t port_;
     String topic_s_;
+    String data_topic_s_;
     bool enabled_;
 
     // Ring buffer for storing messages while MQTT is connecting

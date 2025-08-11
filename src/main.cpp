@@ -80,7 +80,8 @@ void setup()
     // MQTT sink setup from SPIFFS config
     mqtt_manager::MqttConfig mqc;
     mqtt_manager::load_config(mqc);
-    g_mqtt_log_sink = new applog::MqttLogSink(mqc.host.c_str(), mqc.port, mqc.topic.c_str(), mqc.enabled,
+    g_mqtt_log_sink = new applog::MqttLogSink(mqc.host.c_str(), mqc.port, mqc.topic.c_str(), 
+                                              mqc.topic.c_str(), mqc.enabled,
                                     mqc.username.c_str(), mqc.password.c_str());
     g_mqtt_log_sink->begin();
     applog::AppLogger::getInstance().addSink(std::unique_ptr<applog::LogSink>(g_mqtt_log_sink));
@@ -218,30 +219,15 @@ void loop()
                 g_csv_header_configured = true;
             }
 
-            // Emit to Serial
-            // datalog::emit(s, g_data_log_cfg);
-            // Instead of direct serial output, use our new logging system
-            if (g_data_log_cfg.format == datalog::Format::Human) {
-                // For human format, we'll create a string representation
-                char buffer[512];
-                snprintf(buffer, sizeof(buffer), 
-                         "V: %.2fV, I: %.2fA, SOC: %.1f%%, P: %.2fW", 
-                         s.pack_voltage_v, s.pack_current_a, s.soc_pct, s.power_w);
-                APPLOG_INFO(applog::LogFacility::DATA_LOG, "%s", buffer);
-            } else {
-                datalog::emit(s, g_data_log_cfg);
-            }
+            // Emit to Serial (always)
+            datalog::emit(s, g_data_log_cfg);
+            
             // Emit to MQTT if configured (CSV line)
             if (g_data_log_cfg.format == datalog::Format::CSV && g_mqtt_log_sink) {
                 String line;
                 // Build CSV row compatible with header counts
                 datalog::format_csv_row(line, s, g_data_log_cfg);
-                g_mqtt_log_sink->write(line);
-            } else if (g_data_log_cfg.format == datalog::Format::CSV) {
-                // If MQTT is not configured, log to our new system
-                String line;
-                datalog::format_csv_row(line, s, g_data_log_cfg);
-                APPLOG_INFO(applog::LogFacility::DATA_LOG, "%s", line.c_str());
+                g_mqtt_log_sink->publishDataLog(line);
             }
 
         } else {
