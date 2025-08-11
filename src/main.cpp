@@ -5,6 +5,7 @@
 #include "jbd_bms.h"
 #include "logging.h"
 #include "wifi_manager.h"
+#include "mqtt_sink.h"
 
 static constexpr uint32_t READ_INTERVAL_MS = 1000;
 
@@ -27,6 +28,7 @@ static double total_energy_wh = 0.0;
 // Configure logging format and prepare runtime CSV header sizing
 static logging::LogConfig g_log_cfg{};
 static bool g_csv_header_configured = false;
+static logging::mqtt_sink* g_mqtt = nullptr;
 
 void setup()
 {
@@ -65,6 +67,34 @@ void setup()
     } else {
         Serial.println("WiFi initialization failed");
     }
+
+    // MQTT sink setup (configurable via build flags)
+    const char* mqtt_host =
+    #ifdef MQTT_HOST
+        MQTT_HOST;
+    #else
+        "192.168.1.218";
+    #endif
+    const uint16_t mqtt_port =
+    #ifdef MQTT_PORT
+        MQTT_PORT;
+    #else
+        1883;
+    #endif
+    const char* mqtt_topic =
+    #ifdef MQTT_TOPIC
+        MQTT_TOPIC;
+    #else
+        "bms/telemetry";
+    #endif
+    const bool mqtt_enabled =
+    #ifdef MQTT_ENABLED
+        true;
+    #else
+        true;
+    #endif
+    g_mqtt = new logging::mqtt_sink(mqtt_host, mqtt_port, mqtt_topic, mqtt_enabled);
+    g_mqtt->begin();
 
     #ifdef LOG_FORMAT_CSV
     g_log_cfg.format = logging::LogFormat::CSV;
@@ -199,11 +229,22 @@ void loop()
                 g_csv_header_configured = true;
             }
 
+            // Emit to Serial
             logging::log_emit(s, g_log_cfg);
+            // Emit to MQTT if configured (CSV line)
+            if (g_log_cfg.format == logging::LogFormat::CSV && g_mqtt) {
+                String line;
+                // Build CSV row compatible with header counts
+                format_csv_row(line, s, g_log_cfg);
+                g_mqtt->write(line);
+            }
+
         } else {
             Serial.println("ERROR: Failed to read BMS data");
         }
 
+        // Service MQTT client
+        if (g_mqtt) g_mqtt->tick();
         // Wait before next reading
         delay(READ_INTERVAL_MS);
 }

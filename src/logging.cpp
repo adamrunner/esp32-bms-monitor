@@ -76,58 +76,61 @@ static void print_csv_header(const LogConfig& cfg)
     Serial.printf("\n");
 }
 
-static void print_csv_row(const MeasurementSnapshot& s, const LogConfig& cfg)
+void format_csv_row(String& out, const MeasurementSnapshot& s, const LogConfig& cfg)
 {
-    // Scalars
-    Serial.printf("%u,%02u:%02u:%02u,%.3f,%.2f,%.2f,%.1f,%.2f,",
-                s.elapsed_sec, s.hours, s.minutes, s.seconds,
-                s.total_energy_wh,
-                s.pack_voltage_v, s.pack_current_a, s.soc_pct, s.power_w);
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%u,%02u:%02u:%02u,%.3f,%.2f,%.2f,%.1f,%.2f,",
+             s.elapsed_sec, s.hours, s.minutes, s.seconds,
+             s.total_energy_wh,
+             s.pack_voltage_v, s.pack_current_a, s.soc_pct, s.power_w);
+    out += buf;
 
     if (s.full_capacity_ah > 0.0f) {
-        Serial.printf("%.2f,", s.full_capacity_ah);
+        snprintf(buf, sizeof(buf), "%.2f,", s.full_capacity_ah);
+        out += buf;
     } else {
-        Serial.printf(",");
+        out += ",";
     }
 
-    Serial.printf("%.2f,%.2f,%d,",
-                s.peak_current_a,
-                s.peak_power_w,
-                s.cell_count);
+    snprintf(buf, sizeof(buf), "%.2f,%.2f,%d,",
+             s.peak_current_a,
+             s.peak_power_w,
+             s.cell_count);
+    out += buf;
 
-    Serial.printf("%.3f,%d,%.3f,%d,%.3f,%d,",
-                s.min_cell_voltage_v,
-                s.min_cell_num,
-                s.max_cell_voltage_v,
-                s.max_cell_num,
-                s.cell_voltage_delta_v,
-                s.temp_count);
+    snprintf(buf, sizeof(buf), "%.3f,%d,%.3f,%d,%.3f,%d,",
+             s.min_cell_voltage_v,
+             s.min_cell_num,
+             s.max_cell_voltage_v,
+             s.max_cell_num,
+             s.cell_voltage_delta_v,
+             s.temp_count);
+    out += buf;
 
-    Serial.printf("%.1f,%.1f,%d,%d",
-                s.min_temp_c,
-                s.max_temp_c,
-                s.charging_enabled ? 1 : 0,
-                s.discharging_enabled ? 1 : 0);
+    snprintf(buf, sizeof(buf), "%.1f,%.1f,%d,%d",
+             s.min_temp_c,
+             s.max_temp_c,
+             s.charging_enabled ? 1 : 0,
+             s.discharging_enabled ? 1 : 0);
+    out += buf;
 
-    // Cells
     int cells = clamp_cells(cfg.header_cells);
     for (int i = 0; i < cells; ++i) {
-        Serial.printf(",");
+        out += ",";
         if (i < s.cell_count) {
-            Serial.printf("%.3f", s.cell_v[static_cast<size_t>(i)]);
+            snprintf(buf, sizeof(buf), "%.3f", s.cell_v[static_cast<size_t>(i)]);
+            out += buf;
         }
     }
 
-    // Temps
     int temps = clamp_temps(cfg.header_temps);
     for (int i = 0; i < temps; ++i) {
-        Serial.printf(",");
+        out += ",";
         if (i < s.temp_count) {
-            Serial.printf("%.1f", s.temp_c[static_cast<size_t>(i)]);
+            snprintf(buf, sizeof(buf), "%.1f", s.temp_c[static_cast<size_t>(i)]);
+            out += buf;
         }
     }
-
-    Serial.printf("\n");
 }
 
 void log_emit(const MeasurementSnapshot& s, const LogConfig& cfg)
@@ -137,10 +140,14 @@ void log_emit(const MeasurementSnapshot& s, const LogConfig& cfg)
             print_csv_header(cfg);
             g_csv_header_printed = true;
         }
-        print_csv_row(s, cfg);
+        String line;
+        format_csv_row(line, s, cfg);
+        Serial.println(line);
     } else {
         print_human(s, cfg);
     }
 }
 
 } // namespace logging
+
+

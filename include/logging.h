@@ -78,6 +78,9 @@ struct MeasurementSnapshot
 // Emit one log record in the configured format to the current stdout/serial
 void log_emit(const MeasurementSnapshot& s, const LogConfig& cfg);
 
+// Utility: format a CSV row into a String (no newline)
+void format_csv_row(String& out, const MeasurementSnapshot& s, const LogConfig& cfg);
+
 } // namespace logging
 
 #endif // LOGGING_H
