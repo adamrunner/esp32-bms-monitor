@@ -4,3 +4,7 @@
 .vscode/launch.json
 .vscode/ipch
 examples
+
+# WiFi configuration files
+data/wifi_config.txt
+wifi_config.txt

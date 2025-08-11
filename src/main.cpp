@@ -4,6 +4,7 @@
 #include "daly_bms.h"
 #include "jbd_bms.h"
 #include "logging.h"
+#include "wifi_manager.h"
 
 static constexpr uint32_t READ_INTERVAL_MS = 1000;
 
@@ -52,6 +53,18 @@ void setup()
     }
 
     Serial.println("BMS interface created successfully");
+
+    // Initialize WiFi
+    Serial.println("Initializing WiFi...");
+    if (wifi_manager::initialize()) {
+        if (wifi_manager::connect()) {
+            Serial.printf("WiFi connected: %s\n", wifi_manager::getLocalIP().c_str());
+        } else {
+            Serial.printf("WiFi connection failed: %s\n", wifi_manager::getStatusString().c_str());
+        }
+    } else {
+        Serial.println("WiFi initialization failed");
+    }
 
     #ifdef LOG_FORMAT_CSV
     g_log_cfg.format = logging::LogFormat::CSV;
