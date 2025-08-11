@@ -7,6 +7,7 @@ ESP32 based Battery Management System monitor for Daly and JBD BMS units. Provid
 - Daly BMS driver (`lib/daly_bms`) and JBD BMS driver (`lib/jbd_bms`)
 - Periodic polling loop with Arduino framework (`src/main.cpp`)
 - Peak current/power tracking, min/max cell voltage, temperature ranges
+- WiFi connectivity with configurable credentials
 - Example protocol references and tooling under examples/
 
 ## Hardware
@@ -37,7 +38,20 @@ ESP32 based Battery Management System monitor for Daly and JBD BMS units. Provid
 ```
 
 
-## Build and Run (PlatformIO)
+## Setup
+
+### WiFi Configuration
+1. Copy `data/wifi_config.txt` and edit with your credentials:
+   ```
+   ssid=YOUR_WIFI_NETWORK_NAME
+   password=YOUR_WIFI_PASSWORD
+   timeout_ms=10000
+   retry_count=3
+   ```
+
+2. Upload filesystem: `pio run -t uploadfs`
+
+### Build and Run (PlatformIO)
 - Build: `pio run`
 - Upload: `pio run -t upload`
 - Monitor: `pio run -t monitor` (configure speed in `platformio.ini`)
@@ -48,12 +62,14 @@ ESP32 based Battery Management System monitor for Daly and JBD BMS units. Provid
 ## Project Layout
 - `src/main.cpp`: Arduino setup()/loop() initializes and polls autodetected BMS, prints readings
 - `include/bms_interface.h`: C API for measurements and status
+- `include/wifi_manager.h`, `src/wifi_manager.cpp`: WiFi connectivity manager
 - `lib/daly_bms/*`: Daly protocol, data structures, helpers
 - `lib/jbd_bms/*`: JBD packet protocol, parsing, protection flags
+- `data/wifi_config.txt`: WiFi credentials (excluded from git)
 - `platformio.ini`: env esp32dev, framework arduino
 
 ## Usage
-Flash, open serial monitor, and you'll see scroll back of voltages, currents, SOC, temperatures, MOSFET states, peak values, and per-cell/per-sensor details. 
+Flash, open serial monitor, and you'll see scroll back of voltages, currents, SOC, temperatures, MOSFET states, peak values, and per-cell/per-sensor details. WiFi connection status and IP address are also displayed on startup.
 
 Make sure to edit UART pins/baud in the respective files if your wiring differs.
 
