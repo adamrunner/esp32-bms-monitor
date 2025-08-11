@@ -7,6 +7,8 @@
 #include "wifi_manager.h"
 #include "mqtt_sink.h"
 #include "mqtt_manager.h"
+#include "logger.h"
+#include "serial_sink.h"
 
 static constexpr uint32_t READ_INTERVAL_MS = 1000;
 
@@ -30,6 +32,7 @@ static double total_energy_wh = 0.0;
 static logging::LogConfig g_log_cfg{};
 static bool g_csv_header_configured = false;
 static logging::mqtt_sink* g_mqtt = nullptr;
+static logging::serial_sink* g_serial_sink = nullptr;
 
 void setup()
 {
@@ -38,35 +41,40 @@ void setup()
         delay(10);
     }
     
-    Serial.println("Starting BMS Monitor Application");
+    // Initialize our new logging system
+    g_serial_sink = new logging::serial_sink();
+    g_serial_sink->begin();
+    logging::Logger::getInstance().addSink(std::unique_ptr<logging::log_sink>(g_serial_sink));
+    
+    LOG_INFO(logging::LogFacility::MAIN, "Starting BMS Monitor Application");
 
     // Auto-detect BMS type
     // UART1: RX=GPIO27, TX=GPIO14
     if (auto_detect_bms_type()) {
-        Serial.println("Daly BMS detected, initializing...");
+        LOG_INFO(logging::LogFacility::BMS_COMM, "Daly BMS detected, initializing...");
         bms_interface = daly_bms_create(1, 27, 14);  // UART1 with GPIO27(RX), GPIO14(TX)
     } else {
-        Serial.println("JBD BMS detected, initializing...");
+        LOG_INFO(logging::LogFacility::BMS_COMM, "JBD BMS detected, initializing...");
         bms_interface = jbd_bms_create(1, 27, 14);
     }
 
     if (!bms_interface) {
-        Serial.println("ERROR: Failed to create BMS interface");
+        LOG_ERROR(logging::LogFacility::BMS_COMM, "Failed to create BMS interface");
         return;
     }
 
-    Serial.println("BMS interface created successfully");
+    LOG_INFO(logging::LogFacility::BMS_COMM, "BMS interface created successfully");
 
     // Initialize WiFi
-    Serial.println("Initializing WiFi...");
+    LOG_INFO(logging::LogFacility::WIFI, "Initializing WiFi...");
     if (wifi_manager::initialize()) {
         if (wifi_manager::connect()) {
-            Serial.printf("WiFi connected: %s\n", wifi_manager::getLocalIP().c_str());
+            LOG_INFO(logging::LogFacility::WIFI, "WiFi connected: %s", wifi_manager::getLocalIP().c_str());
         } else {
-            Serial.printf("WiFi connection failed: %s\n", wifi_manager::getStatusString().c_str());
+            LOG_ERROR(logging::LogFacility::WIFI, "WiFi connection failed: %s", wifi_manager::getStatusString().c_str());
         }
     } else {
-        Serial.println("WiFi initialization failed");
+        LOG_ERROR(logging::LogFacility::WIFI, "WiFi initialization failed");
     }
 
     // MQTT sink setup from SPIFFS config
@@ -75,6 +83,7 @@ void setup()
     g_mqtt = new logging::mqtt_sink(mqc.host.c_str(), mqc.port, mqc.topic.c_str(), mqc.enabled,
                                     mqc.username.c_str(), mqc.password.c_str());
     g_mqtt->begin();
+    logging::Logger::getInstance().addSink(std::unique_ptr<logging::log_sink>(g_mqtt));
 
     #ifdef LOG_FORMAT_CSV
     g_log_cfg.format = logging::LogFormat::CSV;
@@ -210,17 +219,33 @@ void loop()
             }
 
             // Emit to Serial
-            logging::log_emit(s, g_log_cfg);
+            // logging::log_emit(s, g_log_cfg);
+            // Instead of direct serial output, use our new logging system
+            if (g_log_cfg.format == logging::LogFormat::Human) {
+                // For human format, we'll create a string representation
+                char buffer[512];
+                snprintf(buffer, sizeof(buffer), 
+                         "V: %.2fV, I: %.2fA, SOC: %.1f%%, P: %.2fW", 
+                         s.pack_voltage_v, s.pack_current_a, s.soc_pct, s.power_w);
+                LOG_INFO(logging::LogFacility::DATA_LOG, "%s", buffer);
+            } else {
+                logging::log_emit(s, g_log_cfg);
+            }
             // Emit to MQTT if configured (CSV line)
             if (g_log_cfg.format == logging::LogFormat::CSV && g_mqtt) {
                 String line;
                 // Build CSV row compatible with header counts
                 format_csv_row(line, s, g_log_cfg);
                 g_mqtt->write(line);
+            } else if (g_log_cfg.format == logging::LogFormat::CSV) {
+                // If MQTT is not configured, log to our new system
+                String line;
+                format_csv_row(line, s, g_log_cfg);
+                LOG_INFO(logging::LogFacility::DATA_LOG, "%s", line.c_str());
             }
 
         } else {
-            Serial.println("ERROR: Failed to read BMS data");
+            LOG_ERROR(logging::LogFacility::BMS_COMM, "Failed to read BMS data");
         }
 
         // Service MQTT client
@@ -232,9 +257,9 @@ void loop()
         if (now_ms - last_diag > 10000) {
             last_diag = now_ms;
             if (g_mqtt) {
-                Serial.printf("[MQTT] ok=%lu fail=%lu drop=%lu reconnects=%lu state=%ld\n",
-                              g_mqtt->publish_ok(), g_mqtt->publish_fail(), g_mqtt->dropped(),
-                              g_mqtt->reconnect_attempts(), g_mqtt->last_state());
+                LOG_INFO(logging::LogFacility::MQTT, "ok=%lu fail=%lu drop=%lu reconnects=%lu state=%ld",
+                         g_mqtt->publish_ok(), g_mqtt->publish_fail(), g_mqtt->dropped(),
+                         g_mqtt->reconnect_attempts(), g_mqtt->last_state());
             }
         }
         // Wait before next reading

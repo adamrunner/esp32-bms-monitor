@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include "log_sink.h"
+#include "logger.h"
 
 namespace logging
 {
@@ -13,6 +14,7 @@ public:
     void begin() override;
     void tick() override;
     void write(const String& line) override;
+    void write(LogLevel level, LogFacility facility, const String& message) override;
 
     // Diagnostics
     unsigned long reconnect_attempts() const { return reconnect_attempts_; }

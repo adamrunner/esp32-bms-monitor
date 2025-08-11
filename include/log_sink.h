@@ -7,6 +7,10 @@
 
 namespace logging
 {
+// Forward declarations
+enum class LogLevel;
+enum class LogFacility;
+
 class log_sink
 {
 public:
@@ -14,6 +18,14 @@ public:
     virtual void begin() = 0;
     virtual void tick() {}
     virtual void write(const String& line) = 0;
+    
+    // New interface for the unified logger
+    virtual void write(LogLevel level, LogFacility facility, const String& message) {
+        // Default implementation for backward compatibility
+        (void)level;
+        (void)facility;
+        write(message);
+    }
 };
 }
 

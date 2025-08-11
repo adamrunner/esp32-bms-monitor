@@ -2,6 +2,7 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include "mqtt_sink.h"
+#include "logger.h"
 
 namespace {
 WiFiClient g_wifi_client;
@@ -24,9 +25,9 @@ void mqtt_sink::begin()
     if (!enabled_) return;
     g_mqtt.setServer(host_s_.c_str(), port_);
     g_mqtt.setSocketTimeout(2); // seconds, keep operations short
-    Serial.printf("[MQTT] config host=%s port=%u topic=%s enabled=%d user=%s\n",
-                  host_s_.c_str(), (unsigned)port_, topic_s_.c_str(), enabled_ ? 1 : 0,
-                  (username_s_.length() ? "set" : "none"));
+    LOG_INFO(LogFacility::MQTT, "config host=%s port=%u topic=%s enabled=%d user=%s",
+             host_s_.c_str(), (unsigned)port_, topic_s_.c_str(), enabled_ ? 1 : 0,
+             (username_s_.length() ? "set" : "none"));
 }
 
 bool mqtt_sink::ensure_connected()
@@ -52,14 +53,15 @@ bool mqtt_sink::ensure_connected()
     IPAddress resolved;
     bool dns_ok = WiFi.hostByName(host_s_.c_str(), resolved);
     if (!dns_ok) {
-        Serial.printf("[MQTT] DNS failed for host=%s (WiFi=%d RSSI=%d)\n", host_s_.c_str(), (int)wst, (int)rssi);
+        LOG_ERROR(LogFacility::MQTT, "DNS failed for host=%s (WiFi=%d RSSI=%d)", 
+                  host_s_.c_str(), (int)wst, (int)rssi);
         last_state_ = -2; // network fail
         return false;
     }
 
-    Serial.printf("[MQTT] connecting to %s (%s):%u user=%s WiFi=%d RSSI=%d t=%lu\n",
-                  host_s_.c_str(), resolved.toString().c_str(), (unsigned)port_,
-                  (username_s_.length() ? "set" : "none"), (int)wst, (int)rssi, now);
+    LOG_INFO(LogFacility::MQTT, "connecting to %s (%s):%u user=%s WiFi=%d RSSI=%d t=%lu",
+             host_s_.c_str(), resolved.toString().c_str(), (unsigned)port_,
+             (username_s_.length() ? "set" : "none"), (int)wst, (int)rssi, now);
 
     String client_id = String("esp32-bms-") + String((uint32_t)ESP.getEfuseMac(), HEX);
     unsigned long t0 = millis();
@@ -71,7 +73,8 @@ bool mqtt_sink::ensure_connected()
     }
     unsigned long dt = millis() - t0;
     last_state_ = g_mqtt.state();
-    Serial.printf("[MQTT] connect result ok=%d state=%ld elapsed=%lums\n", ok ? 1 : 0, last_state_, dt);
+    LOG_INFO(LogFacility::MQTT, "connect result ok=%d state=%ld elapsed=%lums", 
+             ok ? 1 : 0, last_state_, dt);
     
     // If we just connected, flush any buffered messages
     if (ok) {
@@ -110,6 +113,7 @@ void mqtt_sink::tick()
 
 void mqtt_sink::write(const String& line)
 {
+    // This is for data logging messages
     if (!enabled_) return;
     
     if (!g_mqtt.connected()) {
@@ -137,6 +141,16 @@ void mqtt_sink::write(const String& line)
         publish_fail_++;
         last_state_ = g_mqtt.state();
     }
+}
+
+void mqtt_sink::write(LogLevel level, LogFacility facility, const String& message)
+{
+    // Forward logging messages to the standard write method
+    // For now, we'll just ignore log messages sent to the MQTT sink
+    // In the future, we could implement a separate MQTT topic for logs
+    (void)level;
+    (void)facility;
+    (void)message;
 }
 
 } // namespace logging
