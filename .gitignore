@@ -5,6 +5,13 @@
 .vscode/ipch
 examples
 
+# ESP-IDF things from other branches
+.clangd
+build/
+data/
+sdkconfig
+sdkconfig.old
+
 # WiFi configuration files
 data/wifi_config.txt
 wifi_config.txt
