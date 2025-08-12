@@ -1,0 +1,8 @@
+# MQTT configuration
+host=192.168.1.218
+port=1883
+topic=bms/telemetry
+enabled=1
+# Optional credentials (leave empty for no auth)
+username=
+password=
