@@ -1,8 +1,8 @@
 #include <cstdio>
 #include <cmath>
-#include "logging.h"
+#include "output.h"
 
-namespace logging
+namespace output
 {
 
 static bool g_csv_header_printed = false;
@@ -17,7 +17,7 @@ static inline int clamp_temps(int requested)
     return requested > DEFAULT_MAX_CSV_TEMPS ? DEFAULT_MAX_CSV_TEMPS : (requested < 0 ? 0 : requested);
 }
 
-static void print_human(const MeasurementSnapshot& s, const LogConfig& cfg)
+static void print_human(const BMSSnapshot& s, const OutputConfig& cfg)
 {
     (void)cfg; // unused for now
 
@@ -56,7 +56,7 @@ static void print_human(const MeasurementSnapshot& s, const LogConfig& cfg)
     }
 }
 
-static void print_csv_header(const LogConfig& cfg)
+static void print_csv_header(const OutputConfig& cfg)
 {
     std::printf("elapsed_seconds,elapsed_hms,total_energy_wh,pack_voltage_v,pack_current_a,state_of_charge_pct,");
     std::printf("power_w,full_capacity_ah,peak_current_a,peak_power_w,cell_count,");
@@ -76,7 +76,7 @@ static void print_csv_header(const LogConfig& cfg)
     std::printf("\n");
 }
 
-static void print_csv_row(const MeasurementSnapshot& s, const LogConfig& cfg)
+static void print_csv_row(const BMSSnapshot& s, const OutputConfig& cfg)
 {
     // Scalars
     std::printf("%u,%02u:%02u:%02u,%.3f,%.2f,%.2f,%.1f,%.2f,",
@@ -130,17 +130,17 @@ static void print_csv_row(const MeasurementSnapshot& s, const LogConfig& cfg)
     std::printf("\n");
 }
 
-void log_emit(const MeasurementSnapshot& s, const LogConfig& cfg)
+void format_and_emit(const BMSSnapshot& data, const OutputConfig& cfg)
 {
-    if (cfg.format == LogFormat::CSV) {
+    if (cfg.format == OutputFormat::CSV) {
         if (cfg.csv_print_header_once && !g_csv_header_printed) {
             print_csv_header(cfg);
             g_csv_header_printed = true;
         }
-        print_csv_row(s, cfg);
+        print_csv_row(data, cfg);
     } else {
-        print_human(s, cfg);
+        print_human(data, cfg);
     }
 }
 
-} // namespace logging
+} // namespace output

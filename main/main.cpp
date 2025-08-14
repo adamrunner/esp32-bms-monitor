@@ -8,8 +8,9 @@
 #include "bms_interface.h"
 #include "daly_bms.h"
 #include "jbd_bms.h"
-#include "logging.h"
-
+#include "output.h"
+#define BMS_RX_PIN 4
+#define BMS_TX_PIN 5
 static const char *TAG = "bms_monitor";
 static constexpr uint32_t READ_INTERVAL_MS = 1000;
 
@@ -32,10 +33,10 @@ extern "C" void app_main(void)
     // Assume 16/17 are the RX/TX pins for UART communication
     if (auto_detect_bms_type()) {
         ESP_LOGI(TAG, "Daly BMS detected, initializing...");
-        bms_interface = daly_bms_create(UART_NUM_1, 16, 17);
+        bms_interface = daly_bms_create(UART_NUM_1, BMS_RX_PIN, BMS_TX_PIN);
     } else {
         ESP_LOGI(TAG, "JBD BMS detected, initializing...");
-        bms_interface = jbd_bms_create(UART_NUM_1, 16, 17);
+        bms_interface = jbd_bms_create(UART_NUM_1, BMS_RX_PIN, BMS_TX_PIN);
     }
 
     if (!bms_interface) {
@@ -46,12 +47,12 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "BMS interface created successfully");
 
     // Configure logging format and prepare runtime CSV header sizing
-    static logging::LogConfig g_log_cfg{};
+    static output::OutputConfig g_log_cfg{};
     #ifdef LOG_FORMAT_CSV
-    g_log_cfg.format = logging::LogFormat::CSV;
+    g_log_cfg.format = output::OutputFormat::CSV;
     g_log_cfg.csv_print_header_once = true;
-    g_log_cfg.header_cells = logging::DEFAULT_MAX_CSV_CELLS;
-    g_log_cfg.header_temps = logging::DEFAULT_MAX_CSV_TEMPS;
+    g_log_cfg.header_cells = output::DEFAULT_MAX_CSV_CELLS;
+    g_log_cfg.header_temps = output::DEFAULT_MAX_CSV_TEMPS;
     #endif
     static bool g_csv_header_configured = false;
 
@@ -106,7 +107,7 @@ extern "C" void app_main(void)
             bool discharging_enabled = bms_interface->isDischargingEnabled(bms_interface->handle);
 
             // Emit via pluggable logger (Human or CSV)
-            logging::MeasurementSnapshot s{};
+            output::BMSSnapshot s{};
             s.start_time_us = start_time;
             s.now_time_us = current_time;
             s.elapsed_sec = elapsed_sec;
@@ -142,21 +143,21 @@ extern "C" void app_main(void)
             // Populate arrays (bounded)
             {
                 int cells = cell_count;
-                if (cells > logging::DEFAULT_MAX_CSV_CELLS) cells = logging::DEFAULT_MAX_CSV_CELLS;
+                if (cells > output::DEFAULT_MAX_CSV_CELLS) cells = output::DEFAULT_MAX_CSV_CELLS;
                 for (int i = 0; i < cells; ++i) {
                     s.cell_v[static_cast<size_t>(i)] = bms_interface->getCellVoltage(bms_interface->handle, i);
                 }
             }
             {
                 int temps = temp_count;
-                if (temps > logging::DEFAULT_MAX_CSV_TEMPS) temps = logging::DEFAULT_MAX_CSV_TEMPS;
+                if (temps > output::DEFAULT_MAX_CSV_TEMPS) temps = output::DEFAULT_MAX_CSV_TEMPS;
                 for (int i = 0; i < temps; ++i) {
                     s.temp_c[static_cast<size_t>(i)] = bms_interface->getTemperature(bms_interface->handle, i);
                 }
             }
 
             // Configure CSV header counts once (auto-detect or build-time override) before first emission
-            if (g_log_cfg.format == logging::LogFormat::CSV && !g_csv_header_configured) {
+            if (g_log_cfg.format == output::OutputFormat::CSV && !g_csv_header_configured) {
                 int hc =
                 #ifdef LOG_CSV_CELLS
                     LOG_CSV_CELLS;
@@ -164,7 +165,7 @@ extern "C" void app_main(void)
                     cell_count;
                 #endif
                 if (hc < 0) hc = 0;
-                if (hc > logging::DEFAULT_MAX_CSV_CELLS) hc = logging::DEFAULT_MAX_CSV_CELLS;
+                if (hc > output::DEFAULT_MAX_CSV_CELLS) hc = output::DEFAULT_MAX_CSV_CELLS;
 
                 int ht =
                 #ifdef LOG_CSV_TEMPS
@@ -173,14 +174,14 @@ extern "C" void app_main(void)
                     temp_count;
                 #endif
                 if (ht < 0) ht = 0;
-                if (ht > logging::DEFAULT_MAX_CSV_TEMPS) ht = logging::DEFAULT_MAX_CSV_TEMPS;
+                if (ht > output::DEFAULT_MAX_CSV_TEMPS) ht = output::DEFAULT_MAX_CSV_TEMPS;
 
                 g_log_cfg.header_cells = hc;
                 g_log_cfg.header_temps = ht;
                 g_csv_header_configured = true;
             }
 
-            logging::log_emit(s, g_log_cfg);
+            output::format_and_emit(s, g_log_cfg);
         } else {
             ESP_LOGE(TAG, "Failed to read BMS measurements");
             printf("ERROR: Failed to read BMS data\n");

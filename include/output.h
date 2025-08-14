@@ -4,32 +4,32 @@
 #include <array>
 #include <cstdint>
 
-namespace logging
+namespace output
 {
 
 // Compile-time defaults
 constexpr int DEFAULT_MAX_CSV_CELLS = 16;
 constexpr int DEFAULT_MAX_CSV_TEMPS = 8;
 
-enum class LogFormat
+enum class OutputFormat
 {
     Human = 0,
     CSV   = 1
 };
 
-struct LogConfig
+struct OutputConfig
 {
 #ifdef LOG_FORMAT_CSV
-    LogFormat format { LogFormat::CSV };
+    OutputFormat format { OutputFormat::CSV };
 #else
-    LogFormat format { LogFormat::Human };
+    OutputFormat format { OutputFormat::Human };
 #endif
     bool csv_print_header_once { true };
     int header_cells { DEFAULT_MAX_CSV_CELLS };
     int header_temps { DEFAULT_MAX_CSV_TEMPS };
 };
 
-struct MeasurementSnapshot
+struct BMSSnapshot
 {
     // Timing
     uint64_t start_time_us { 0 };
@@ -76,8 +76,8 @@ struct MeasurementSnapshot
 };
 
 // Emit one log record in the configured format to the current stdout/serial
-void log_emit(const MeasurementSnapshot& s, const LogConfig& cfg);
+void format_and_emit(const BMSSnapshot& data, const OutputConfig& cfg);
 
-} // namespace logging
+} // namespace output
 
 #endif // LOGGING_H
