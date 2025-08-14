@@ -12,8 +12,8 @@ extern "C" {
 
 // JBD BMS specific definitions
 #define JBD_BMS_UART_PORT UART_NUM_1
-#define JBD_BMS_RX_PIN 16
-#define JBD_BMS_TX_PIN 17
+#define JBD_BMS_RX_PIN 4
+#define JBD_BMS_TX_PIN 5
 #define JBD_BMS_BAUD_RATE 9600
 #define JBD_XFER_BUFFER_LENGTH 256
 #define JBD_MAX_CELLS 48
