@@ -25,3 +25,6 @@ storage.bin
 # Examples (if not needed in repo)
 examples
 CLAUDE.md
+
+# Crush agent directory
+.crush

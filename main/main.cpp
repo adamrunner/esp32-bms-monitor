@@ -9,6 +9,7 @@
 #include "daly_bms.h"
 #include "jbd_bms.h"
 #include "output.h"
+#include "log_manager.h"
 #define BMS_RX_PIN 4
 #define BMS_TX_PIN 5
 #include "wifi_manager.h"
@@ -50,6 +51,18 @@ extern "C" void app_main(void)
         } else {
             ESP_LOGW(TAG, "Failed to load WiFi config: %s", esp_err_to_name(wifi_ret));
         }
+    }
+
+    // Initialize logging system
+    ESP_LOGI(TAG, "Initializing logging manager...");
+    std::string logging_config = R"({"sinks":[{"type":"serial","config":{"format":"csv","print_header":true,"max_cells":4,"max_temps":3}}]})";
+
+    if (!LOG_INIT(logging_config)) {
+        ESP_LOGE(TAG, "Failed to initialize logging system");
+        // Fallback to basic serial output
+        ESP_LOGI(TAG, "Using basic serial output...");
+    } else {
+        ESP_LOGI(TAG, "Logging system initialized with configuration: %s", logging_config.c_str());
     }
 
     // Auto-detect BMS type
@@ -204,7 +217,8 @@ extern "C" void app_main(void)
                 g_csv_header_configured = true;
             }
 
-            output::format_and_emit(s, g_log_cfg);
+            // Send to new modular logging system
+            LOG_SEND(s);
         } else {
             ESP_LOGE(TAG, "Failed to read BMS measurements");
             // printf("ERROR: Failed to read BMS data\n");
@@ -230,4 +244,7 @@ extern "C" void app_main(void)
         // Wait before next reading
         vTaskDelay(pdMS_TO_TICKS(READ_INTERVAL_MS));
     }
+
+    // Cleanup
+    LOG_SHUTDOWN();
 }
