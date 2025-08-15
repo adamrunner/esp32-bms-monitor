@@ -23,6 +23,7 @@
 #define NVS_KEY_PASSWORD "password"
 #define NVS_KEY_TIMEOUT "timeout"
 #define NVS_KEY_RETRY "retry"
+#define NVS_KEY_PMF_REQUIRED "pmf_req"
 
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT BIT1
@@ -187,6 +188,7 @@ esp_err_t wifi_manager_config_from_file(const char* config_file_path)
     // Set defaults
     s_wifi_config.timeout_ms = WIFI_DEFAULT_TIMEOUT_MS;
     s_wifi_config.retry_count = WIFI_DEFAULT_RETRY_COUNT;
+    s_wifi_config.pmf_required = false;  // Default to optional PMF for compatibility
 
     while (fgets(line, sizeof(line), file)) {
         // Remove newline
@@ -226,6 +228,8 @@ esp_err_t wifi_manager_config_from_file(const char* config_file_path)
                 ESP_LOGW(TAG, "Invalid retry count %d, using default %d", retry, WIFI_DEFAULT_RETRY_COUNT);
                 s_wifi_config.retry_count = WIFI_DEFAULT_RETRY_COUNT;
             }
+        } else if (strncmp(line, "pmf_required=", 13) == 0) {
+            s_wifi_config.pmf_required = (strncmp(line + 13, "true", 4) == 0) || (strncmp(line + 13, "1", 1) == 0);
         }
     }
 
@@ -237,8 +241,9 @@ esp_err_t wifi_manager_config_from_file(const char* config_file_path)
         return ESP_ERR_INVALID_ARG;
     }
 
-    ESP_LOGI(TAG, "WiFi config loaded: SSID=%s, timeout=%lu ms, retry_count=%d",
-             s_wifi_config.ssid, s_wifi_config.timeout_ms, s_wifi_config.retry_count);
+    ESP_LOGI(TAG, "WiFi config loaded: SSID=%s, timeout=%lu ms, retry_count=%d, PMF=%s",
+             s_wifi_config.ssid, s_wifi_config.timeout_ms, s_wifi_config.retry_count,
+             s_wifi_config.pmf_required ? "required" : "optional");
 
     return ESP_OK;
 }
@@ -260,7 +265,7 @@ esp_err_t wifi_manager_start(void)
             .threshold.authmode = WIFI_AUTH_WPA2_PSK,
             .pmf_cfg = {
                 .capable = true,
-                .required = true  // Enhanced security: require PMF
+                .required = s_wifi_config.pmf_required  // Configurable PMF requirement
             },
         },
     };
@@ -402,7 +407,7 @@ const char* wifi_manager_get_state_string(wifi_state_t state)
 }
 
 esp_err_t wifi_manager_store_credentials(const char* ssid, const char* password, 
-                                       uint32_t timeout_ms, uint8_t retry_count)
+                                       uint32_t timeout_ms, uint8_t retry_count, bool pmf_required)
 {
     if (!ssid || !password) {
         return ESP_ERR_INVALID_ARG;
@@ -438,6 +443,9 @@ esp_err_t wifi_manager_store_credentials(const char* ssid, const char* password,
         ret = nvs_set_u8(nvs_handle, NVS_KEY_RETRY, retry_count);
     }
     if (ret == ESP_OK) {
+        ret = nvs_set_u8(nvs_handle, NVS_KEY_PMF_REQUIRED, pmf_required ? 1 : 0);
+    }
+    if (ret == ESP_OK) {
         ret = nvs_commit(nvs_handle);
     }
 
@@ -467,6 +475,7 @@ esp_err_t wifi_manager_load_credentials(void)
     // Set defaults first
     s_wifi_config.timeout_ms = WIFI_DEFAULT_TIMEOUT_MS;
     s_wifi_config.retry_count = WIFI_DEFAULT_RETRY_COUNT;
+    s_wifi_config.pmf_required = false;  // Default to optional PMF
 
     // Load SSID
     size_t ssid_len = WIFI_SSID_MAX_LEN;
@@ -506,11 +515,18 @@ esp_err_t wifi_manager_load_credentials(void)
         }
     }
 
+    // Load PMF requirement (optional)
+    uint8_t pmf_val;
+    if (nvs_get_u8(nvs_handle, NVS_KEY_PMF_REQUIRED, &pmf_val) == ESP_OK) {
+        s_wifi_config.pmf_required = (pmf_val != 0);
+    }
+
     nvs_close(nvs_handle);
 
     if (ret == ESP_OK && strlen(s_wifi_config.ssid) > 0) {
-        ESP_LOGI(TAG, "WiFi credentials loaded: SSID=%s, timeout=%lu ms, retry_count=%d",
-                 s_wifi_config.ssid, s_wifi_config.timeout_ms, s_wifi_config.retry_count);
+        ESP_LOGI(TAG, "WiFi credentials loaded: SSID=%s, timeout=%lu ms, retry_count=%d, PMF=%s",
+                 s_wifi_config.ssid, s_wifi_config.timeout_ms, s_wifi_config.retry_count,
+                 s_wifi_config.pmf_required ? "required" : "optional");
         return ESP_OK;
     } else {
         ESP_LOGW(TAG, "No valid credentials found in NVS");
