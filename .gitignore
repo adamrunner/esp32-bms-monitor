@@ -18,6 +18,10 @@ sdkconfig.old
 # Data files (if they are temporary/generated)
 data/
 
+# SPIFFS binary images (generated at build time)
+*.bin
+storage.bin
+
 # Examples (if not needed in repo)
 examples
 CLAUDE.md
