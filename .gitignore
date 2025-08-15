@@ -11,7 +11,7 @@ sdkconfig.old
 .vscode/launch.json
 .vscode/ipch
 .vscode
-
+.cache
 # Language server
 .clangd
 
@@ -25,6 +25,7 @@ storage.bin
 # Examples (if not needed in repo)
 examples
 CLAUDE.md
+CRUSH.md
 
 # Crush agent directory
 .crush
