@@ -176,3 +176,37 @@ add_subdirectory(logging)
 
 # Link to your main target
 target_link_libraries(your_app logging)
+```
+
+## Memory Management Best Practices
+
+This logging system uses smart pointers for automatic memory management:
+
+### Smart Pointer Usage
+- **`std::unique_ptr`**: Used for exclusive ownership of dynamically allocated objects
+- **Automatic cleanup**: Resources are automatically freed when smart pointers go out of scope
+- **Exception safety**: Memory is properly cleaned up even if exceptions occur
+
+### Serializer Factory Pattern
+```cpp
+// Modern approach with smart pointers (recommended)
+auto serializer = BMSSerializer::createSerializer(SerializationFormat::JSON);
+// Automatic cleanup when serializer goes out of scope
+
+// Old approach with raw pointers (avoid)
+BMSSerializer* serializer = BMSSerializer::createSerializer(SerializationFormat::JSON);
+delete serializer; // Manual cleanup required - error prone
+```
+
+### Benefits of Smart Pointers
+1. **No manual memory management**: Eliminates `delete` calls
+2. **Memory leak prevention**: Automatic cleanup
+3. **Exception safety**: Resources cleaned up during stack unwinding
+4. **Clear ownership semantics**: `unique_ptr` indicates single ownership
+5. **RAII compliance**: Resources acquired in constructors, released in destructors
+
+### Best Practices
+- Always use `std::unique_ptr` for factory-created objects
+- Avoid raw pointers for memory management
+- Use `std::move()` when transferring ownership
+- Let smart pointers handle cleanup automatically

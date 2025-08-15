@@ -3,6 +3,7 @@
 
 #include "log_sink.h"
 #include "log_serializers.h"
+#include <memory>
 #include <map>
 
 namespace logging {
@@ -34,7 +35,7 @@ public:
     bool reconnect();
 
 private:
-    BMSSerializer* serializer_;
+    std::unique_ptr<BMSSerializer> serializer_;
     int socket_fd_;
     bool initialized_;
     Mode mode_;
@@ -58,10 +59,10 @@ private:
     bool createSocket();
     void closeSocket();
     void closeClient(int client_fd);
-    
+
     bool handleClientConnection(int client_fd);
     bool sendToClient(int client_fd, const std::string& data);
-    
+
     // Stats
     size_t total_bytes_sent_;
     size_t connections_count_;

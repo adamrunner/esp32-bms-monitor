@@ -24,7 +24,7 @@ public:
     bool isReady() const override;
 
 private:
-    BMSSerializer* serializer_;
+    std::unique_ptr<BMSSerializer> serializer_;
     std::string url_;
     std::string method_;
     std::map<std::string, std::string> headers_;
@@ -39,7 +39,7 @@ private:
 
     bool parseConfig(const std::string& config_str);
     bool sendRequest(const std::string& data, const std::string& content_type);
-    
+
     // Stats
     size_t requests_sent_;
     size_t bytes_sent_;

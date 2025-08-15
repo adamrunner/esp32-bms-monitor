@@ -14,7 +14,7 @@
 
 using namespace logging;
 
-TCPLogSink::TCPLogSink() : 
+TCPLogSink::TCPLogSink() :
     serializer_(nullptr),
     socket_fd_(-1),
     initialized_(false),
@@ -40,7 +40,6 @@ bool TCPLogSink::init(const std::string& config) {
     }
 
     // Create serializer
-    delete serializer_;
     serializer_ = logging::BMSSerializer::createSerializer(config_.format);
     if (!serializer_) {
         setLastError("Failed to create serializer for format: " + config_.format);
@@ -78,7 +77,7 @@ bool TCPLogSink::send(const output::BMSSnapshot& data) {
     }
 
     bool success = false;
-    
+
     // For now, we'll just return false since we're not implementing TCP sockets
     setLastError("TCP socket not implemented for ESP-IDF");
     return false;
@@ -87,10 +86,9 @@ bool TCPLogSink::send(const output::BMSSnapshot& data) {
 void TCPLogSink::shutdown() {
     // Close client sockets
     // For now, we're not managing any client sockets
-    
+
     closeSocket();
-    delete serializer_;
-    serializer_ = nullptr;
+    serializer_.reset();
     initialized_ = false;
 }
 
@@ -126,23 +124,23 @@ bool TCPLogSink::listen() {
 
 bool TCPLogSink::parseConfig(const std::string& config_str) {
     std::string config = config_str + ",";  // Sentinel
-    
+
     size_t start = 0;
     size_t pos = config.find('=');
-    
+
     while (pos != std::string::npos) {
         size_t next_comma = config.find(',', pos);
         size_t prev_comma = config.rfind(',', pos-1);
-        
+
         std::string key = config.substr(prev_comma+1, pos-prev_comma-1);
         std::string value = config.substr(pos+1, next_comma-pos-1);
-        
+
         auto first_non_space = key.find_first_not_of(" \t\r\n");
         auto last_non_space = key.find_last_not_of(" \t\r\n");
         if (first_non_space != std::string::npos) {
           key = key.substr(first_non_space, last_non_space - first_non_space + 1);
         }
-        
+
         first_non_space = value.find_first_not_of(" \t\r\n");
         last_non_space = value.find_last_not_of(" \t\r\n");
         if (first_non_space != std::string::npos) {
@@ -164,7 +162,7 @@ bool TCPLogSink::parseConfig(const std::string& config_str) {
         else if (key == "reconnect_interval_ms") config_.reconnect_interval_ms = atoi(value.c_str());
         else if (key == "auto_reconnect") config_.auto_reconnect = (value == "true");
         else if (key == "max_connections") config_.max_connections = atoi(value.c_str());
-        
+
         start = next_comma + 1;
         pos = config.find('=', start);
         if (next_comma+1 >= config.length()) break;

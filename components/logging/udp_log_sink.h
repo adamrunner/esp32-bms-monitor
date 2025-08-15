@@ -3,6 +3,7 @@
 
 #include "log_sink.h"
 #include "log_serializers.h"
+#include <memory>
 
 struct sockaddr_in;
 
@@ -25,7 +26,7 @@ public:
     bool isReady() const override;
 
 private:
-    BMSSerializer* serializer_;
+    std::unique_ptr<BMSSerializer> serializer_;
     int socket_fd_;
     struct sockaddr_in* dest_addr_;
     bool initialized_;
@@ -44,7 +45,7 @@ private:
     bool createSocket();
     bool configureSocket();
     void closeSocket();
-    
+
     // Stats
     size_t total_bytes_sent_;
     size_t packets_sent_;

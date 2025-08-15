@@ -2,6 +2,7 @@
 #define LOG_SERIALIZERS_H
 
 #include <string>
+#include <memory>
 #include "bms_snapshot.h"
 
 namespace logging {
@@ -79,8 +80,8 @@ public:
      * @param format serialization format
      * @return serializer instance (nullptr if unsupported)
      */
-    static BMSSerializer* createSerializer(SerializationFormat format);
-    static BMSSerializer* createSerializer(const std::string& format_str);
+    static std::unique_ptr<BMSSerializer> createSerializer(SerializationFormat format);
+    static std::unique_ptr<BMSSerializer> createSerializer(const std::string& format_str);
 };
 
 } // namespace logging

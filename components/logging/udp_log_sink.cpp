@@ -11,7 +11,7 @@
 
 using namespace logging;
 
-UDPLogSink::UDPLogSink() : 
+UDPLogSink::UDPLogSink() :
     serializer_(nullptr),
     socket_fd_(-1),
     dest_addr_(nullptr),
@@ -37,7 +37,6 @@ bool UDPLogSink::init(const std::string& config) {
     }
 
     // Create serializer
-    delete serializer_;
     serializer_ = logging::BMSSerializer::createSerializer(config_.format);
     if (!serializer_) {
         setLastError("Failed to create serializer for format: " + config_.format);
@@ -80,8 +79,7 @@ bool UDPLogSink::send(const output::BMSSnapshot& data) {
 
 void UDPLogSink::shutdown() {
     closeSocket();
-    delete serializer_;
-    serializer_ = nullptr;
+    serializer_.reset();
     initialized_ = false;
 }
 
@@ -96,24 +94,24 @@ bool UDPLogSink::isReady() const {
 bool UDPLogSink::parseConfig(const std::string& config_str) {
     // Key=value parser for "ip=192.168.1.255,port=3330,format=json"
     std::string config = config_str + ",";  // Sentinel
-    
+
     size_t start = 0;
     size_t pos = config.find('=');
-    
+
     while (pos != std::string::npos) {
         size_t next_comma = config.find(',', pos);
         size_t prev_comma = config.rfind(',', pos-1);
-        
+
         std::string key = config.substr(prev_comma+1, pos-prev_comma-1);
         std::string value = config.substr(pos+1, next_comma-pos-1);
-        
+
         // Trim whitespace
         auto first_non_space = key.find_first_not_of(" \t\r\n");
         auto last_non_space = key.find_last_not_of(" \t\r\n");
         if (first_non_space != std::string::npos) {
             key = key.substr(first_non_space, last_non_space - first_non_space + 1);
         }
-        
+
         first_non_space = value.find_first_not_of(" \t\r\n");
         last_non_space = value.find_last_not_of(" \t\r\n");
         if (first_non_space != std::string::npos) {
@@ -131,7 +129,7 @@ bool UDPLogSink::parseConfig(const std::string& config_str) {
         else if (key == "broadcast") config_.broadcast = (value == "true");
         else if (key == "max_packet_size") config_.max_packet_size = atoi(value.c_str());
         else if (key == "max_packs_per_batch") config_.max_packs_per_batch = atoi(value.c_str());
-        
+
         start = next_comma + 1;
         pos = config.find('=', start);
     }

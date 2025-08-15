@@ -3,6 +3,7 @@
 
 #include "log_sink.h"
 #include "log_serializers.h"
+#include <memory>
 
 namespace logging {
 
@@ -22,7 +23,7 @@ public:
     bool isReady() const override;
 
 private:
-    BMSSerializer* serializer_;
+    std::unique_ptr<BMSSerializer> serializer_;
     bool initialized_;
     bool config_print_header_;
     bool printed_header_;

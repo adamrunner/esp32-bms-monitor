@@ -3,6 +3,7 @@
 
 #include "log_sink.h"
 #include "log_serializers.h"
+#include <memory>
 
 // ESP-IDF includes
 #include <mqtt_client.h>
@@ -25,7 +26,7 @@ public:
     bool isReady() const override;
 
 private:
-    BMSSerializer* serializer_;
+    std::unique_ptr<BMSSerializer> serializer_;
     esp_mqtt_client_handle_t mqtt_client_;
     bool initialized_;
     bool connected_;

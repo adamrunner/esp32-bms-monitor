@@ -45,14 +45,14 @@ public:
     bool serialize(const output::BMSSnapshot& data, std::string& result) override {
         std::ostringstream json;
         json << std::fixed << std::setprecision(3);
-        
+
         json << "{\n";
         json << "  \"timestamp\": " << data.now_time_us << ",\n";
         json << "  \"elapsed_seconds\": " << data.elapsed_sec << ",\n";
         json << "  \"elapsed_hms\": \"" << data.hours << ":"
                 << data.minutes << ":" << data.seconds << "\",\n";
         json << "  \"total_energy_wh\": " << data.total_energy_wh << ",\n";
-        
+
         json << "  \"pack\": {\n";
         json << "    \"voltage_v\": " << data.pack_voltage_v << ",\n";
         json << "    \"current_a\": " << data.pack_current_a << ",\n";
@@ -60,12 +60,12 @@ public:
         json << "    \"power_w\": " << data.power_w << ",\n";
         json << "    \"full_capacity_ah\": " << data.full_capacity_ah << "\n";
         json << "  },\n";
-        
+
         json << "  \"stats\": {\n";
         json << "    \"peak_current_a\": " << data.peak_current_a << ",\n";
         json << "    \"peak_power_w\": " << data.peak_power_w << "\n";
         json << "  },\n";
-        
+
         json << "  \"cells\": {\n";
         json << "    \"count\": " << data.cell_count << ",\n";
         json << "    \"min_voltage_v\": " << data.min_cell_voltage_v << ",\n";
@@ -74,31 +74,31 @@ public:
         json << "    \"max_cell\": " << data.max_cell_num << ",\n";
         json << "    \"voltage_delta_v\": " << data.cell_voltage_delta_v << ",\n";
         json << "    \"values\": [";
-        
+
         for (int i = 0; i < data.cell_count; ++i) {
             if (i > 0) json << ",";
             json << data.cell_v[i];
         }
         json << "]\n  },\n";
-        
+
         json << "  \"temperatures\": {\n";
         json << "    \"count\": " << data.temp_count << ",\n";
         json << "    \"min_c\": " << data.min_temp_c << ",\n";
         json << "    \"max_c\": " << data.max_temp_c << ",\n";
         json << "    \"values\": [";
-        
+
         for (int i = 0; i < data.temp_count; ++i) {
             if (i > 0) json << ",";
             json << data.temp_c[i];
         }
         json << "]\n  },\n";
-        
+
         json << "  \"status\": {\n";
         json << "    \"charging_enabled\": " << (data.charging_enabled ? "true" : "false") << ",\n";
         json << "    \"discharging_enabled\": " << (data.discharging_enabled ? "true" : "false") << "\n";
         json << "  }\n";
         json << "}\n";
-        
+
         result = json.str();
         return true;
     }
@@ -123,7 +123,7 @@ private:
     output::OutputConfig cfg_;
 
 public:
-    CSVSerializer(int max_cells = output::DEFAULT_MAX_CSV_CELLS, 
+    CSVSerializer(int max_cells = output::DEFAULT_MAX_CSV_CELLS,
                  int max_temps = output::DEFAULT_MAX_CSV_TEMPS) {
         cfg_.header_cells = max_cells;
         cfg_.header_temps = max_temps;
@@ -133,10 +133,10 @@ public:
 
     bool serialize(const output::BMSSnapshot& data, std::string& result) override {
         // For CSV, we'll reuse the existing implementation
-        // This is a simplified version - in practice, you might want to use the existing 
+        // This is a simplified version - in practice, you might want to use the existing
         // CSV formatting directly or create a more efficient implementation
         result.clear();
-        
+
         char buffer[1024];
         int len = snprintf(buffer, sizeof(buffer),
             "%lld,%u,%02u:%02u:%02u,%.3f,%.2f,%.2f,%.1f,%.2f,%.2f,%.2f,%.2f,%d,%.3f,%d,%.3f,%d,%.3f,%d,%.1f,%.1f,%d,%d",
@@ -149,7 +149,7 @@ public:
             data.max_cell_num, data.cell_voltage_delta_v, data.temp_count,
             data.min_temp_c, data.max_temp_c, data.charging_enabled ? 1 : 0,
             data.discharging_enabled ? 1 : 0);
-        
+
         result += std::string(buffer, len);
 
         int cells = (data.cell_count < cfg_.header_cells) ? data.cell_count : cfg_.header_cells;
@@ -157,13 +157,13 @@ public:
             len = snprintf(buffer, sizeof(buffer), ",%.3f", data.cell_v[i]);
             result += std::string(buffer, len);
         }
-        
+
         int temps = (data.temp_count < cfg_.header_temps) ? data.temp_count : cfg_.header_temps;
         for (int i = 0; i < temps; ++i) {
             len = snprintf(buffer, sizeof(buffer), ",%.1f", data.temp_c[i]);
             result += std::string(buffer, len);
         }
-        
+
         return true;
     }
 
@@ -183,16 +183,16 @@ public:
 };
 
 // Factory method implementations
-BMSSerializer* BMSSerializer::createSerializer(SerializationFormat format) {
+std::unique_ptr<BMSSerializer> BMSSerializer::createSerializer(SerializationFormat format) {
     switch (format) {
-        case SerializationFormat::JSON: return new JSONSerializer();
-        case SerializationFormat::CSV: return new CSVSerializer();
+        case SerializationFormat::JSON: return std::make_unique<JSONSerializer>();
+        case SerializationFormat::CSV: return std::make_unique<CSVSerializer>();
         // TODO: Implement other formats
         default: return nullptr;
     }
 }
 
-BMSSerializer* BMSSerializer::createSerializer(const std::string& format_str) {
+std::unique_ptr<BMSSerializer> BMSSerializer::createSerializer(const std::string& format_str) {
     return createSerializer(stringToFormat(format_str));
 }
 

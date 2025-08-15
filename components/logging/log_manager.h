@@ -115,27 +115,33 @@ private:
 
     // Sink registry
     std::map<std::string, SinkCreator> sink_factories_;
-    
+
     // Active sinks
     std::map<std::string, std::unique_ptr<LogSink>> active_sinks_;
-    
+
     // Configuration parser
     struct SinkConfig {
         std::string type;
         std::string config;
         bool enabled = true;
     };
-    
+
     std::vector<SinkConfig> parseConfiguration(const std::string& config);
-    
+
     // Internal helper methods
     LogSinkPtr createSink(const std::string& sink_type, const std::string& config);
-    
+
     // Default factory registrations
     void registerDefaultSinks();
-    
+
     // Set last error helper
     void setLastError(const std::string& err);
+
+    // Get last error helper
+    std::string getLastError() const;
+
+private:
+    std::string last_error_;
 };
 
 /**

@@ -34,8 +34,6 @@ bool SerialLogSink::init(const std::string& config) {
     }
 
     // Create appropriate serializer
-    delete serializer_;
-
     if (config_.format == "csv") {
         // For now, we'll use the base BMSSerializer class for CSV format
         serializer_ = logging::BMSSerializer::createSerializer("csv");
@@ -133,8 +131,7 @@ bool SerialLogSink::send(const output::BMSSnapshot& data) {
 }
 
 void SerialLogSink::shutdown() {
-    delete serializer_;
-    serializer_ = nullptr;
+    serializer_.reset();
     initialized_ = false;
 }
 
