@@ -8,7 +8,9 @@
 #include "bms_interface.h"
 #include "daly_bms.h"
 #include "jbd_bms.h"
-#include "output.h"
+#include "bms_snapshot.h"
+#include "log_manager.h"
+#include "sntp_manager.h"
 #define BMS_RX_PIN 4
 #define BMS_TX_PIN 5
 #include "wifi_manager.h"
@@ -18,6 +20,9 @@ static constexpr uint32_t READ_INTERVAL_MS = 1000;
 
 // BMS instances
 static bms_interface_t* bms_interface = NULL;
+
+// SNTP manager
+static sntp::SNTPManager sntp_manager;
 
 // Function to detect BMS type (placeholder implementation)
 static bool auto_detect_bms_type() {
@@ -50,6 +55,35 @@ extern "C" void app_main(void)
         } else {
             ESP_LOGW(TAG, "Failed to load WiFi config: %s", esp_err_to_name(wifi_ret));
         }
+    }
+
+    // Initialize SNTP for real timestamps
+    ESP_LOGI(TAG, "Initializing SNTP for real timestamps...");
+    if (!sntp_manager.init("pool.ntp.org", "UTC")) {
+        ESP_LOGW(TAG, "Failed to initialize SNTP, using fallback timestamps");
+    } else {
+        // Wait for time synchronization (non-blocking)
+        ESP_LOGI(TAG, "Waiting for time synchronization...");
+        if (sntp_manager.waitForSync(5000)) { // 5 second timeout
+            ESP_LOGI(TAG, "Time synchronized successfully");
+        } else {
+            ESP_LOGW(TAG, "Time sync timeout, continuing with system time");
+        }
+    }
+
+    // Initialize logging system
+    ESP_LOGI(TAG, "Initializing logging manager...");
+    std::string logging_config = R"({"sinks":[
+        {"type":"serial","config":{"format":"csv","print_header":true,"max_cells":4,"max_temps":3}},
+        {"type":"mqtt","config":{"format":"csv","topic":"bms/telemetry","qos":1}}
+    ]})";
+
+    if (!LOG_INIT(logging_config)) {
+        ESP_LOGE(TAG, "Failed to initialize logging system");
+        // Fallback to basic serial output
+        ESP_LOGI(TAG, "Using basic serial output...");
+    } else {
+        ESP_LOGI(TAG, "Logging system initialized with configuration: %s", logging_config.c_str());
     }
 
     // Auto-detect BMS type
@@ -137,6 +171,9 @@ extern "C" void app_main(void)
             s.hours = hours;
             s.minutes = minutes;
             s.seconds = seconds;
+            
+            // Set real timestamp from SNTP (fallback to current time if not sync'd)
+            s.real_timestamp = sntp_manager.getCurrentTime();
 
             s.total_energy_wh = total_energy_wh;
 
@@ -204,7 +241,8 @@ extern "C" void app_main(void)
                 g_csv_header_configured = true;
             }
 
-            output::format_and_emit(s, g_log_cfg);
+            // Send to new modular logging system
+            LOG_SEND(s);
         } else {
             ESP_LOGE(TAG, "Failed to read BMS measurements");
             // printf("ERROR: Failed to read BMS data\n");
@@ -230,4 +268,7 @@ extern "C" void app_main(void)
         // Wait before next reading
         vTaskDelay(pdMS_TO_TICKS(READ_INTERVAL_MS));
     }
+
+    // Cleanup
+    LOG_SHUTDOWN();
 }
