@@ -139,7 +139,8 @@ public:
         
         char buffer[1024];
         int len = snprintf(buffer, sizeof(buffer),
-            "%u,%02u:%02u:%02u,%.3f,%.2f,%.2f,%.1f,%.2f,%.2f,%.2f,%.2f,%d,%.3f,%d,%.3f,%d,%.3f,%d,%.1f,%.1f,%d,%d",
+            "%lld,%u,%02u:%02u:%02u,%.3f,%.2f,%.2f,%.1f,%.2f,%.2f,%.2f,%.2f,%d,%.3f,%d,%.3f,%d,%.3f,%d,%.1f,%.1f,%d,%d",
+            (long long)data.real_timestamp,
             data.elapsed_sec, data.hours, data.minutes, data.seconds,
             data.total_energy_wh,
             data.pack_voltage_v, data.pack_current_a, data.soc_pct, data.power_w,

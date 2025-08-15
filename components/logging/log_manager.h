@@ -3,7 +3,7 @@
 
 #include "log_sink.h"
 #include "log_serializers.h"
-#include "output.h"
+#include "bms_snapshot.h"
 #include <memory>
 #include <vector>
 #include <map>

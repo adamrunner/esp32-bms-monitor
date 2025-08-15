@@ -4,7 +4,7 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include "output.h"
+#include "bms_snapshot.h"
 
 namespace logging {
 

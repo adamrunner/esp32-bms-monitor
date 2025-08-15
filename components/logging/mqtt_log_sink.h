@@ -4,8 +4,8 @@
 #include "log_sink.h"
 #include "log_serializers.h"
 
-// Forward declaration for MQTT client
-struct mqtt_client;
+// ESP-IDF includes
+#include <mqtt_client.h>
 
 namespace logging {
 
@@ -26,7 +26,7 @@ public:
 
 private:
     BMSSerializer* serializer_;
-    mqtt_client* mqtt_client_;
+    esp_mqtt_client_handle_t mqtt_client_;
     bool initialized_;
     bool connected_;
 
@@ -34,8 +34,8 @@ private:
     struct Config {
         std::string broker_host = "localhost";
         int broker_port = 1883;
-        std::string topic = "bms/data";
-        std::string format = "json";
+        std::string topic = "bms/telemetry";
+        std::string format = "csv";
         int qos = 0;
         bool retain = false;
         std::string username = "";
@@ -47,9 +47,11 @@ private:
     } config_;
 
     bool parseConfig(const std::string& config_str);
+    bool loadSpiffsConfig();
     bool connectMQTT();
     void disconnectMQTT();
-    
+    void mqttEventHandler(void* handler_args, esp_event_base_t base, int32_t event_id, void* event_data);
+
     // Stats
     size_t messages_published_;
     size_t bytes_published_;

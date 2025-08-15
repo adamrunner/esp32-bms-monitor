@@ -2,7 +2,7 @@
 #define LOG_SERIALIZERS_H
 
 #include <string>
-#include "output.h"
+#include "bms_snapshot.h"
 
 namespace logging {
 
