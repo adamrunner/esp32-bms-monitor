@@ -11,6 +11,8 @@
 #include "output.h"
 #define BMS_RX_PIN 4
 #define BMS_TX_PIN 5
+#include "wifi_manager.h"
+
 static const char *TAG = "bms_monitor";
 static constexpr uint32_t READ_INTERVAL_MS = 1000;
 
@@ -28,6 +30,27 @@ static bool auto_detect_bms_type() {
 extern "C" void app_main(void)
 {
     ESP_LOGI(TAG, "Starting BMS Monitor Application");
+
+    // Initialize WiFi manager
+    ESP_LOGI(TAG, "Initializing WiFi manager...");
+    esp_err_t wifi_ret = wifi_manager_init();
+    if (wifi_ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize WiFi manager: %s", esp_err_to_name(wifi_ret));
+    } else {
+        // Load WiFi configuration from file
+        wifi_ret = wifi_manager_config_from_file("/spiffs/wifi_config.txt");
+        if (wifi_ret == ESP_OK) {
+            ESP_LOGI(TAG, "Starting WiFi connection...");
+            wifi_ret = wifi_manager_start();
+            if (wifi_ret == ESP_OK) {
+                ESP_LOGI(TAG, "WiFi connected successfully");
+            } else {
+                ESP_LOGW(TAG, "WiFi connection failed: %s", esp_err_to_name(wifi_ret));
+            }
+        } else {
+            ESP_LOGW(TAG, "Failed to load WiFi config: %s", esp_err_to_name(wifi_ret));
+        }
+    }
 
     // Auto-detect BMS type
     // Assume 16/17 are the RX/TX pins for UART communication
@@ -184,7 +207,24 @@ extern "C" void app_main(void)
             output::format_and_emit(s, g_log_cfg);
         } else {
             ESP_LOGE(TAG, "Failed to read BMS measurements");
-            printf("ERROR: Failed to read BMS data\n");
+            // printf("ERROR: Failed to read BMS data\n");
+        }
+
+        // Check WiFi status periodically (every 10 readings)
+        static int wifi_check_counter = 0;
+        if (++wifi_check_counter >= 10) {
+            wifi_check_counter = 0;
+            wifi_status_t wifi_status;
+            if (wifi_manager_get_status(&wifi_status) == ESP_OK) {
+                ESP_LOGD(TAG, "WiFi Status: %s, IP: %d.%d.%d.%d, RSSI: %d dBm, Disconnects: %lu",
+                         wifi_manager_get_state_string(wifi_status.state),
+                         (int)(wifi_status.ip_address & 0xFF),
+                         (int)((wifi_status.ip_address >> 8) & 0xFF),
+                         (int)((wifi_status.ip_address >> 16) & 0xFF),
+                         (int)((wifi_status.ip_address >> 24) & 0xFF),
+                         wifi_status.rssi,
+                         wifi_status.disconnect_count);
+            }
         }
 
         // Wait before next reading
