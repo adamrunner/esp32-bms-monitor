@@ -75,7 +75,8 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "Initializing logging manager...");
     std::string logging_config = R"({"sinks":[
         {"type":"serial","config":{"format":"csv","print_header":true,"max_cells":4,"max_temps":3}},
-        {"type":"mqtt","config":{"format":"csv","topic":"bms/telemetry","qos":1}}
+        {"type":"mqtt","config":{"format":"csv","topic":"bms/telemetry","qos":1}},
+        {"type":"sdcard","config":{"file_prefix":"bms_data","buffer_size":8192,"flush_interval_ms":30000,"max_lines_per_file":10000,"enable_free_space_check":true,"min_free_space_mb":10}}
     ]})";
 
     if (!LOG_INIT(logging_config)) {
@@ -171,7 +172,7 @@ extern "C" void app_main(void)
             s.hours = hours;
             s.minutes = minutes;
             s.seconds = seconds;
-            
+
             // Set real timestamp from SNTP (fallback to current time if not sync'd)
             s.real_timestamp = sntp_manager.getCurrentTime();
 

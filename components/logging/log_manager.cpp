@@ -17,6 +17,9 @@
 #ifdef INCLUDE_MQTT_SINK
 #include "mqtt_log_sink.h"
 #endif
+#ifdef INCLUDE_SDCARD_SINK
+#include "sd_card_log_sink.h"
+#endif
 
 namespace logging {
 
@@ -52,6 +55,12 @@ void LogManager::registerDefaultSinks() {
     #ifdef INCLUDE_MQTT_SINK
     registerSink("mqtt", [] (const std::string& config) {
         return std::make_unique<MQTTLogSink>();
+    });
+    #endif
+
+    #ifdef INCLUDE_SDCARD_SINK
+    registerSink("sdcard", [] (const std::string& config) {
+        return std::make_unique<SDCardLogSink>();
     });
     #endif
 }

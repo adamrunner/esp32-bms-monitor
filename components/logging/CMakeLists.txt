@@ -7,12 +7,13 @@ set(srcs
     "tcp_log_sink.cpp"
     "http_log_sink.cpp"
     "mqtt_log_sink.cpp"
+    "sd_card_log_sink.cpp"
 )
 
 idf_component_register(
     SRCS ${srcs}
     INCLUDE_DIRS "."
-    REQUIRES 
+    REQUIRES
         esp_wifi
         esp_netif
         log
@@ -20,7 +21,10 @@ idf_component_register(
         main
         json
         mqtt
-    PRIV_REQUIRES 
+        fatfs
+        sdmmc
+        spi_flash
+    PRIV_REQUIRES
         nvs_flash
         esp_http_client
         spiffs
@@ -32,4 +36,5 @@ target_compile_definitions(${COMPONENT_TARGET} PRIVATE
     INCLUDE_UDP_SINK=1
     INCLUDE_TCP_SINK=1
     INCLUDE_MQTT_SINK=1
+    INCLUDE_SDCARD_SINK=1
 )
