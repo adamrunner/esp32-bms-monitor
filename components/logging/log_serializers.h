@@ -57,6 +57,18 @@ public:
     virtual std::string getContentType() const = 0;
 
     /**
+     * Get header string for the serialization format
+     * @return header string (empty if no header needed)
+     */
+    virtual std::string getHeader() const = 0;
+
+    /**
+     * Check if this format uses headers
+     * @return true if headers are used
+     */
+    virtual bool hasHeader() const { return true; }
+
+    /**
      * Check if batching/multiple records are supported
      * @return true if batching supported
      */

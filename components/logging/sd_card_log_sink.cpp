@@ -628,9 +628,23 @@ bool SDCardLogSink::createNewFile() {
     stats_.current_file_bytes = 0;
     stats_.total_files_created++;
 
-    // Note: CSV header writing would be handled by the serializer
-    // For now, we'll skip header writing since the BMSSerializer interface
-    // doesn't provide a getHeader() method
+    // Write header if the serializer supports it
+    if (serializer_->hasHeader()) {
+        std::string header = serializer_->getHeader();
+        if (!header.empty()) {
+            size_t written = fwrite(header.c_str(), 1, header.size(), current_file_);
+            if (written != header.size()) {
+                int error_code = errno;
+                ESP_LOGE(TAG, "Failed to write header: wrote %zu of %zu bytes (errno: %d - %s)",
+                         written, header.size(), error_code, strerror(error_code));
+                fclose(current_file_);
+                current_file_ = nullptr;
+                handleSDCardError("Failed to write CSV header to file");
+                return false;
+            }
+            ESP_LOGI(TAG, "CSV header written successfully (%zu bytes)", header.size());
+        }
+    }
     header_written_ = true;
 
     // Flush to ensure header is written

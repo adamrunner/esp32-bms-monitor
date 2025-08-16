@@ -111,6 +111,14 @@ public:
         return "application/json";
     }
 
+    std::string getHeader() const override {
+        return ""; // JSON doesn't need headers
+    }
+
+    bool hasHeader() const override {
+        return false; // JSON format doesn't use headers
+    }
+
     bool supportsBatching() const override { return true; }
 };
 
@@ -173,6 +181,23 @@ public:
 
     std::string getContentType() const override {
         return "text/csv";
+    }
+
+    std::string getHeader() const override {
+        std::string header = "timestamp,elapsed_sec,hours:minutes:seconds,total_energy_wh,pack_voltage_v,pack_current_a,soc_pct,power_w,full_capacity_ah,peak_current_a,peak_power_w,cell_count,min_cell_voltage_v,min_cell_num,max_cell_voltage_v,max_cell_num,cell_voltage_delta_v,temp_count,min_temp_c,max_temp_c,charging_enabled,discharging_enabled";
+        
+        // Add cell voltage headers
+        for (int i = 0; i < cfg_.header_cells; ++i) {
+            header += ",cell_v_" + std::to_string(i + 1);
+        }
+        
+        // Add temperature headers
+        for (int i = 0; i < cfg_.header_temps; ++i) {
+            header += ",temp_c_" + std::to_string(i + 1);
+        }
+        
+        header += "\n";
+        return header;
     }
 
     bool setOptions(const std::string& options) override {
