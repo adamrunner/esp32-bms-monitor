@@ -16,7 +16,7 @@
 #include "wifi_manager.h"
 
 static const char *TAG = "bms_monitor";
-static constexpr uint32_t READ_INTERVAL_MS = 1000;
+static constexpr uint32_t READ_INTERVAL_MS = 10000;
 
 // BMS instances
 static bms_interface_t* bms_interface = NULL;
@@ -76,7 +76,7 @@ extern "C" void app_main(void)
     std::string logging_config = R"({"sinks":[
         {"type":"serial","config":{"format":"csv","print_header":true,"max_cells":4,"max_temps":3}},
         {"type":"mqtt","config":{"format":"csv","topic":"bms/telemetry","qos":1}},
-        {"type":"sdcard","config":{"file_prefix":"bms_data","buffer_size":8192,"flush_interval_ms":30000,"max_lines_per_file":10000,"enable_free_space_check":true,"min_free_space_mb":10}}
+        {"type":"sdcard","config":{"file_prefix":"bms_data","buffer_size":32768,"flush_interval_ms":120000,"fsync_interval_ms":60000,"max_lines_per_file":10000,"enable_free_space_check":true,"min_free_space_mb":10,"spi":{"mosi_pin":23,"miso_pin":19,"clk_pin":18,"cs_pin":22,"freq_khz":10000}}}
     ]})";
 
     if (!LOG_INIT(logging_config)) {
@@ -87,8 +87,6 @@ extern "C" void app_main(void)
         ESP_LOGI(TAG, "Logging system initialized with configuration: %s", logging_config.c_str());
     }
 
-    // Auto-detect BMS type
-    // Assume 16/17 are the RX/TX pins for UART communication
     if (auto_detect_bms_type()) {
         ESP_LOGI(TAG, "Daly BMS detected, initializing...");
         bms_interface = daly_bms_create(UART_NUM_1, BMS_RX_PIN, BMS_TX_PIN);

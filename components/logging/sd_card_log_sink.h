@@ -22,6 +22,7 @@ struct SDCardConfig {
     std::string file_extension = ".csv";
     size_t buffer_size = 10240;  // 10KB default
     uint32_t flush_interval_ms = 30000;  // 30 seconds
+    uint32_t fsync_interval_ms = 60000;  // 60 seconds between fsync calls
     uint32_t max_lines_per_file = 10000;  // Fallback rotation
     bool enable_free_space_check = true;
     size_t min_free_space_mb = 10;  // Minimum free space before stopping
@@ -32,7 +33,7 @@ struct SDCardConfig {
     int spi_clk_pin = 18;
     int spi_cs_pin = 22;
     int spi_host = SPI2_HOST;
-    int spi_freq_khz = 20000;  // 20MHz
+    int spi_freq_khz = 10000;  // 10MHz
 };
 
 /**
@@ -111,6 +112,9 @@ private:
 
     // Timing
     uint64_t last_flush_time_;
+
+    // Fsync throttling
+    uint64_t last_fsync_time_us_;
 
     // SD card hardware
     sdmmc_card_t* card_;

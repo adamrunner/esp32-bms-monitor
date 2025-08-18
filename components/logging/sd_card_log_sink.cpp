@@ -58,6 +58,7 @@ bool SDCardLogSink::init(const std::string& config) {
     // Initialize buffer and timing
     write_buffer_.reserve(config_.buffer_size);
     last_flush_time_ = esp_timer_get_time();
+    last_fsync_time_us_ = last_flush_time_;
 
     state_ = SDCardState::READY;
     ESP_LOGI(TAG, "SD Card Log Sink initialized successfully");
@@ -98,8 +99,7 @@ bool SDCardLogSink::send(const output::BMSSnapshot& data) {
     // Check if we need to flush - be more aggressive about flushing
     uint64_t now = esp_timer_get_time();
     if ((now - last_flush_time_) >= (config_.flush_interval_ms * 1000) ||
-        write_buffer_.size() >= config_.buffer_size ||
-        stats_.current_file_lines % 10 == 0) {  // Flush every 10 lines
+        write_buffer_.size() >= config_.buffer_size) {
         return writeBufferToFile();
     }
 
@@ -114,6 +114,8 @@ void SDCardLogSink::shutdown() {
 
     // Close current file
     if (current_file_) {
+        // Ensure data is persisted before closing
+        fsync(fileno(current_file_));
         fclose(current_file_);
         current_file_ = nullptr;
     }
@@ -202,6 +204,11 @@ bool SDCardLogSink::parseConfig(const std::string& config_str) {
     if (cJSON_IsNumber(flush_interval)) {
         config_.flush_interval_ms = static_cast<uint32_t>(flush_interval->valueint);
     }
+    // Parse fsync interval
+    cJSON *fsync_interval = cJSON_GetObjectItemCaseSensitive(json, "fsync_interval_ms");
+    if (cJSON_IsNumber(fsync_interval)) {
+        config_.fsync_interval_ms = static_cast<uint32_t>(fsync_interval->valueint);
+    }
 
     // Parse max lines per file
     cJSON *max_lines = cJSON_GetObjectItemCaseSensitive(json, "max_lines_per_file");
@@ -277,11 +284,19 @@ bool SDCardLogSink::initSDCard() {
     bus_cfg.data5_io_num = GPIO_NUM_NC;
     bus_cfg.data6_io_num = GPIO_NUM_NC;
     bus_cfg.data7_io_num = GPIO_NUM_NC;
-    bus_cfg.max_transfer_sz = 4000;
+    bus_cfg.max_transfer_sz = 8192;
     bus_cfg.flags = 0;
     bus_cfg.data_io_default_level = 0;
     bus_cfg.isr_cpu_id = ESP_INTR_CPU_AFFINITY_AUTO;
     bus_cfg.intr_flags = 0;
+
+    // Configure GPIO drive capabilities for signal integrity
+    gpio_set_drive_capability(static_cast<gpio_num_t>(config_.spi_mosi_pin), GPIO_DRIVE_CAP_3);
+    gpio_set_drive_capability(static_cast<gpio_num_t>(config_.spi_clk_pin), GPIO_DRIVE_CAP_3);
+    gpio_set_drive_capability(static_cast<gpio_num_t>(config_.spi_cs_pin), GPIO_DRIVE_CAP_3);
+
+    // Configure MISO pin pull-up for signal integrity
+    gpio_set_pull_mode(static_cast<gpio_num_t>(config_.spi_miso_pin), GPIO_PULLUP_ONLY);
 
     esp_err_t ret = spi_bus_initialize((spi_host_device_t)config_.spi_host, &bus_cfg, SDSPI_DEFAULT_DMA);
     if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
@@ -368,6 +383,8 @@ bool SDCardLogSink::rotateFileIfNeeded() {
 
         // Close current file
         if (current_file_) {
+            // Ensure data is persisted before closing
+            fsync(fileno(current_file_));
             fclose(current_file_);
             current_file_ = nullptr;
         }
@@ -460,17 +477,25 @@ bool SDCardLogSink::writeBufferToFile() {
         return false;
     }
 
-    // Force filesystem sync to ensure data reaches SD card
-    if (fsync(fileno(current_file_)) != 0) {
-        int error_code = errno;
-        ESP_LOGW(TAG, "fsync failed (errno: %d - %s)", error_code, strerror(error_code));
-        // Don't fail on fsync error, just warn
+    // Throttled fsync to reduce blocking on SD cards
+    {
+        const uint64_t now_us = esp_timer_get_time();
+        if (config_.fsync_interval_ms > 0 &&
+            (now_us - last_fsync_time_us_) >= (uint64_t)config_.fsync_interval_ms * 1000ULL) {
+            if (fsync(fileno(current_file_)) != 0) {
+                int error_code = errno;
+                ESP_LOGW(TAG, "fsync failed (errno: %d - %s)", error_code, strerror(error_code));
+                // Don't fail on fsync error, just warn
+            } else {
+                last_fsync_time_us_ = now_us;
+            }
+        }
     }
 
     // Update statistics
     stats_.total_bytes_written += written;
     stats_.last_flush_time_us = esp_timer_get_time();
-    
+
     // Update file stats using ftell() for accurate byte count
     updateFileStats();
 
@@ -710,16 +735,16 @@ size_t SDCardLogSink::getAvailableSpace() {
     // Use ESP-IDF's high-level function to get actual filesystem information
     uint64_t total_bytes, free_bytes;
     esp_err_t result = esp_vfs_fat_info(config_.mount_point.c_str(), &total_bytes, &free_bytes);
-    
+
     if (result != ESP_OK) {
         ESP_LOGW(TAG, "Failed to get filesystem info: %s", esp_err_to_name(result));
-        
+
         // Fallback to card capacity estimation if VFS info fails
         uint64_t total_capacity = ((uint64_t) card_->csd.capacity) * card_->csd.sector_size;
         ESP_LOGD(TAG, "Using fallback capacity estimation: %llu bytes", total_capacity);
         return static_cast<size_t>(total_capacity * 0.9); // Assume 90% available as fallback
     }
-    
+
     ESP_LOGD(TAG, "Filesystem info - Total: %llu bytes, Free: %llu bytes", total_bytes, free_bytes);
     return static_cast<size_t>(free_bytes);
 }
