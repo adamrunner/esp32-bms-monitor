@@ -12,7 +12,7 @@ This document describes the SD Card logging functionality added to the ESP32 BMS
 - Buffered Writes: Configurable buffer size with timed flush intervals
 - File Rotation: Daily rotation with line-count fallback (default 10,000 lines)
 - Timestamped Files: Automatic filename generation with date stamps
-- CSV Headers: Automatic CSV header writing for each new file
+- CSV Headers: Automatic CSV header writing for each new file; skipped when appending to a non-empty file
 
 ### Advanced Features
 - Free Space Monitoring: Configurable minimum free space checking
@@ -39,6 +39,7 @@ This document describes the SD Card logging functionality added to the ESP32 BMS
     "max_lines_per_file": 10000,
     "enable_free_space_check": true,
     "min_free_space_mb": 10,
+    "count_lines_on_open": false,
     "spi": {
       "mosi_pin": 23,
       "miso_pin": 19,
@@ -61,6 +62,7 @@ This document describes the SD Card logging functionality added to the ESP32 BMS
 - max_lines_per_file (number, default: 10000): Maximum lines per file before rotation
 - enable_free_space_check (boolean, default: true): Enable free space monitoring
 - min_free_space_mb (number, default: 10): Minimum free space in MB
+- count_lines_on_open (boolean, default: false): When appending to an existing file, optionally scan the file to initialize the line count; improves rotation accuracy at the cost of startup latency
 - spi (object): SPI configuration block (see below)
 
 ### SPI Configuration
@@ -90,13 +92,19 @@ Examples:
 
 ### Daily Rotation
 - Files rotate automatically when the date string changes
-- New file created with updated date stamp
+- If a YYYYMMDD.csv file already exists for the new date, the sink appends to it; otherwise a new base file is created
 - Previous file is flushed and closed
 
 ### Line Count Rotation
 - Fallback rotation when file exceeds max_lines_per_file
 - Sequential numbering for same-day files
 - Prevents excessively large files
+
+### Timezone and Rotation
+- Daily rotation and filename dates are computed using localtime() based on the process TZ.
+- TZ is set early in main via SNTPManager using `/spiffs/timezone.txt` (POSIX TZ string). If the file is missing/empty, the default is `PST8PDT,M3.2.0/2,M11.1.0/2` (Pacific with DST).
+- Per-line CSV timestamps remain Unix epoch seconds; only rotation boundaries and dates for filenames use the local calendar day.
+- Update `data/timezone.txt` and reflash SPIFFS (`./build_spiffs.sh && ./flash_spiffs.sh`) to change the device timezone.
 
 ## Error Handling
 
@@ -137,6 +145,7 @@ std::string logging_config = R"({"sinks":[
     "max_lines_per_file":10000,
     "enable_free_space_check":true,
     "min_free_space_mb":10,
+    "count_lines_on_open":true,
     "spi":{"mosi_pin":23,"miso_pin":19,"clk_pin":18,"cs_pin":22,"freq_khz":10000}
   }}
 ]})";
@@ -195,4 +204,4 @@ timestamp,elapsed_sec,pack_voltage_v,pack_current_a,soc_pct,power_w,...
 1710518401,1,12.6,-2.4,85.2,-30.2,...
 ```
 
-Headers are automatically written to each new file for easy data analysis.
+Headers are automatically written to each new file for easy data analysis. When appending to a non-empty file, the header is not written again.

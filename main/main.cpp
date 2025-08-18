@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdint.h>
+#include <string>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <driver/uart.h>
@@ -59,7 +60,27 @@ extern "C" void app_main(void)
 
     // Initialize SNTP for real timestamps
     ESP_LOGI(TAG, "Initializing SNTP for real timestamps...");
-    if (!sntp_manager.init("pool.ntp.org", "UTC")) {
+
+    // Determine timezone from /spiffs/timezone.txt if present, else default to Pacific with DST
+    const char* kDefaultTZ = "PST8PDT,M3.2.0/2,M11.1.0/2";
+    std::string tz = kDefaultTZ;
+
+    if (FILE* f = fopen("/spiffs/timezone.txt", "r")) {
+        char buf[128] = {0};
+        size_t n = fread(buf, 1, sizeof(buf) - 1, f);
+        fclose(f);
+        // Trim trailing whitespace
+        while (n > 0 && (buf[n-1] == '\n' || buf[n-1] == '\r' || buf[n-1] == ' ' || buf[n-1] == '\t')) {
+            n--;
+        }
+        tz.assign(buf, n);
+        if (tz.empty()) {
+            tz = kDefaultTZ;
+        }
+    }
+    ESP_LOGI(TAG, "Using timezone: %s", tz.c_str());
+
+    if (!sntp_manager.init("pool.ntp.org", tz)) {
         ESP_LOGW(TAG, "Failed to initialize SNTP, using fallback timestamps");
     } else {
         // Wait for time synchronization (non-blocking)

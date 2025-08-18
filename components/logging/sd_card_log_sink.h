@@ -26,6 +26,7 @@ struct SDCardConfig {
     uint32_t max_lines_per_file = 10000;  // Fallback rotation
     bool enable_free_space_check = true;
     size_t min_free_space_mb = 10;  // Minimum free space before stopping
+    bool count_lines_on_open = false;
 
     // SPI Configuration (ESP32-C6 defaults)
     int spi_mosi_pin = 23;
@@ -121,14 +122,17 @@ private:
     esp_vfs_fat_sdmmc_mount_config_t mount_config_;
 
     // Private methods
+    enum class OpenMode { AppendIfExists, AlwaysNewUnique };
+
     bool parseConfig(const std::string& config_str);
     bool initSDCard();
     bool rotateFileIfNeeded();
+    // Legacy wrapper; returns unique filename for today (no path)
     std::string generateFilename();
     bool writeBufferToFile();
     bool checkFreeSpace();
     void updateFileStats();
-    bool createNewFile();
+    bool createNewFile(OpenMode mode = OpenMode::AppendIfExists);
     void handleSDCardError(const std::string& error);
 
     // Helper methods
@@ -136,6 +140,13 @@ private:
     std::string formatTimestamp(time_t timestamp);
     size_t getAvailableSpace();
     bool validateFilename(const std::string& filename);
+
+    // New file helpers
+    bool fileExists(const std::string& full_path);
+    std::string buildDailyBaseFilename();
+    bool openFileForAppendOrWrite(const std::string& full_path, bool append, bool& is_new_file);
+    bool scanExistingFileStats(const std::string& full_path, size_t& line_count, size_t& byte_count);
+    std::string generateUniqueFilenameForToday();
 };
 
 } // namespace logging

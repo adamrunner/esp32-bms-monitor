@@ -152,8 +152,8 @@ bool SDCardLogSink::rotateFile() {
         current_file_ = nullptr;
     }
 
-    // Create new file
-    return createNewFile();
+    // Create new file (manual rotation -> always start a new unique file)
+    return createNewFile(OpenMode::AlwaysNewUnique);
 }
 
 bool SDCardLogSink::flushBuffer() {
@@ -226,6 +226,12 @@ bool SDCardLogSink::parseConfig(const std::string& config_str) {
     cJSON *min_free_space = cJSON_GetObjectItemCaseSensitive(json, "min_free_space_mb");
     if (cJSON_IsNumber(min_free_space)) {
         config_.min_free_space_mb = static_cast<size_t>(min_free_space->valueint);
+    }
+
+    // Parse optional line counting on open
+    cJSON *count_lines_flag = cJSON_GetObjectItemCaseSensitive(json, "count_lines_on_open");
+    if (cJSON_IsBool(count_lines_flag)) {
+        config_.count_lines_on_open = cJSON_IsTrue(count_lines_flag);
     }
 
     // Parse SPI configuration
@@ -347,7 +353,7 @@ bool SDCardLogSink::initSDCard() {
 bool SDCardLogSink::rotateFileIfNeeded() {
     // If no file is open, create one
     if (!current_file_) {
-        return createNewFile();
+        return createNewFile(OpenMode::AppendIfExists);
     }
 
     bool needs_rotation = false;
@@ -389,52 +395,18 @@ bool SDCardLogSink::rotateFileIfNeeded() {
             current_file_ = nullptr;
         }
 
-        // Create new file
-        return createNewFile();
+        // Create new file based on rotation reason
+        return createNewFile(reason == FileRotationReason::LINE_COUNT_LIMIT
+                                 ? OpenMode::AlwaysNewUnique
+                                 : OpenMode::AppendIfExists);
     }
 
     return true;
 }
 
 std::string SDCardLogSink::generateFilename() {
-    time_t now;
-    time(&now);
-
-    std::string date_str = formatTimestamp(now);
-
-    // Use FAT-compatible filename format (numbers-only timestamp works best)
-    std::string filename = date_str + config_.file_extension;
-
-    // If file already exists, add a sequence number
-    // std::string full_path = config_.mount_point + "/" + filename;
-    std::string full_path = filename;
-    int sequence = 1;
-
-    while (access(full_path.c_str(), F_OK) == 0) {
-        std::ostringstream oss;
-        // Use numbers-only format for sequence (avoid underscore)
-        oss << date_str
-            << std::setfill('0') << std::setw(3) << sequence
-            << config_.file_extension;
-        filename = oss.str();
-        full_path = config_.mount_point + "/" + filename;
-        sequence++;
-
-        // Prevent infinite loop
-        if (sequence > 999) {
-            ESP_LOGW(TAG, "Too many files for date %s, using sequence 999", date_str.c_str());
-            break;
-        }
-    }
-
-    if (!validateFilename(filename)) {
-        ESP_LOGW(TAG, "Generated filename is invalid: %s", filename.c_str());
-        // Fallback to simple naming
-        filename = "data" + config_.file_extension;
-    }
-
-    ESP_LOGI(TAG, "Generated filename: %s", filename.c_str());
-    return filename;
+    // Legacy wrapper to maintain compatibility
+    return generateUniqueFilenameForToday();
 }
 
 bool SDCardLogSink::writeBufferToFile() {
@@ -544,117 +516,58 @@ void SDCardLogSink::updateFileStats() {
              stats_.current_file_lines, stats_.current_file_bytes, stats_.total_files_created);
 }
 
-bool SDCardLogSink::createNewFile() {
-    // Generate new filename
-    std::string filename = generateFilename();
-    std::string full_path = config_.mount_point + "/" + filename;
-
-    ESP_LOGI(TAG, "Creating new file: %s", full_path.c_str());
-    ESP_LOGI(TAG, "Filename: '%s', Full path: '%s'", filename.c_str(), full_path.c_str());
-
-    // Debug: List the contents of the mount point to see what's there
-    ESP_LOGI(TAG, "Checking mount point contents...");
-    struct stat st;
-    if (stat(config_.mount_point.c_str(), &st) == 0) {
-        ESP_LOGI(TAG, "Mount point exists and is accessible");
-        if (S_ISDIR(st.st_mode)) {
-            ESP_LOGI(TAG, "Mount point is a directory");
-        } else {
-            ESP_LOGI(TAG, "Mount point is not a directory");
-        }
-    } else {
-        ESP_LOGW(TAG, "Mount point not accessible: %s", config_.mount_point.c_str());
-    }
-
-    // Validate the filename before attempting to create the file
-    if (!validateFilename(filename)) {
-        ESP_LOGE(TAG, "Invalid filename generated: %s", filename.c_str());
-        // Use a simple fallback filename
-        filename = "bms_data.csv";
-        full_path = config_.mount_point + "/" + filename;
-        ESP_LOGI(TAG, "Using fallback filename: %s", filename.c_str());
-    }
-
-    // Ensure the path doesn't have double slashes
-    size_t double_slash_pos = full_path.find("//");
-    while (double_slash_pos != std::string::npos) {
-        full_path.replace(double_slash_pos, 2, "/");
-        double_slash_pos = full_path.find("//");
-    }
-
-    ESP_LOGI(TAG, "Final path after cleanup: %s", full_path.c_str());
-
-    // Open file for writing
-    current_file_ = fopen(full_path.c_str(), "w");
-    if (!current_file_) {
-        // Try to get more detailed error information
-        int error_code = errno;
-        ESP_LOGW(TAG, "Failed to create file: %s (errno: %d - %s)", full_path.c_str(), error_code, strerror(error_code));
-
-        // Try creating a simple test file to see if it's a path issue
-        ESP_LOGW(TAG, "Attempting to create test file in root of mount point");
-        std::string test_path = config_.mount_point + "/test.txt";
-        FILE* test_file = fopen(test_path.c_str(), "w");
-        if (test_file) {
-            ESP_LOGI(TAG, "Test file creation successful");
-            fclose(test_file);
-            // Try to remove the test file
-            remove(test_path.c_str());
-
-            // Try different filename variations to find what works
-            // Based on testing, FAT filesystem has issues with mixed letters/numbers
-            time_t current_time = time(nullptr);
-            std::string timestamp = formatTimestamp(current_time);
-
-            std::vector<std::string> filename_attempts = {
-                // Try numbers-only timestamp (this works)
-                timestamp + ".csv",
-                // Try with simple prefix
-                "data" + timestamp + ".csv",
-                // Try all letters prefix
-                "bmsdata.csv",
-                // Last resort
-                "data.csv"
-            };
-
-            for (const auto& attempt_filename : filename_attempts) {
-                std::string attempt_path = config_.mount_point + "/" + attempt_filename;
-                ESP_LOGI(TAG, "Trying filename: %s", attempt_filename.c_str());
-
-                current_file_ = fopen(attempt_path.c_str(), "w");
-                if (current_file_) {
-                    ESP_LOGI(TAG, "Filename worked: %s", attempt_filename.c_str());
-                    filename = attempt_filename;
-                    full_path = attempt_path;
-                    break;
-                } else {
-                    ESP_LOGW(TAG, "Filename failed: %s (errno: %d - %s)", attempt_filename.c_str(), errno, strerror(errno));
-                }
-            }
-        } else {
-            ESP_LOGE(TAG, "Test file creation also failed (errno: %d - %s)", errno, strerror(errno));
-        }
-
-        if (!current_file_) {
-            std::string error_msg = "Failed to create any file variation in: " + config_.mount_point;
-            handleSDCardError(error_msg);
-            return false;
-        }
-    }
-
-    // Update current date string for rotation tracking
+bool SDCardLogSink::createNewFile(OpenMode mode) {
+    // Determine today's base filename and full path
     time_t now;
     time(&now);
     current_date_string_ = formatTimestamp(now);
 
-    // Reset file statistics
-    stats_.current_filename = filename;
-    stats_.current_file_lines = 0;
-    stats_.current_file_bytes = 0;
-    stats_.total_files_created++;
+    std::string filename;
+    std::string full_path;
 
-    // Write header if the serializer supports it
-    if (serializer_->hasHeader()) {
+    bool append = false;
+    bool is_new_file = true;
+
+    if (mode == OpenMode::AppendIfExists) {
+        // Try to append to the daily base file if it exists
+        filename = buildDailyBaseFilename();
+        full_path = config_.mount_point + "/" + filename;
+
+        if (fileExists(full_path)) {
+            append = true;
+            if (!openFileForAppendOrWrite(full_path, /*append=*/true, is_new_file)) {
+                return false;
+            }
+            ESP_LOGI(TAG, "Opened existing daily file for append: %s", full_path.c_str());
+        } else {
+            // Create a new base file for today
+            append = false;
+            if (!openFileForAppendOrWrite(full_path, /*append=*/false, is_new_file)) {
+                return false;
+            }
+            ESP_LOGI(TAG, "Created new daily base file: %s", full_path.c_str());
+        }
+    } else { // AlwaysNewUnique
+        filename = generateUniqueFilenameForToday();
+        full_path = config_.mount_point + "/" + filename;
+        append = false;
+        if (!openFileForAppendOrWrite(full_path, /*append=*/false, is_new_file)) {
+            return false;
+        }
+        ESP_LOGI(TAG, "Created new unique file: %s", full_path.c_str());
+    }
+
+    // Validate the filename
+    if (!validateFilename(filename)) {
+        ESP_LOGE(TAG, "Invalid filename generated: %s", filename.c_str());
+        fclose(current_file_);
+        current_file_ = nullptr;
+        handleSDCardError("Invalid filename");
+        return false;
+    }
+
+    // Write header only for new files or when appending to a zero-sized file
+    if (serializer_->hasHeader() && is_new_file) {
         std::string header = serializer_->getHeader();
         if (!header.empty()) {
             size_t written = fwrite(header.c_str(), 1, header.size(), current_file_);
@@ -667,15 +580,52 @@ bool SDCardLogSink::createNewFile() {
                 handleSDCardError("Failed to write CSV header to file");
                 return false;
             }
-            ESP_LOGI(TAG, "CSV header written successfully (%zu bytes)", header.size());
+            // Ensure header is persisted
+            fflush(current_file_);
+            header_written_ = true;
+            ESP_LOGI(TAG, "CSV header written (%zu bytes)", header.size());
         }
+    } else {
+        // Header already present in existing file or serializer has no header
+        header_written_ = true;
     }
-    header_written_ = true;
 
-    // Flush to ensure header is written
-    fflush(current_file_);
+    // Initialize stats
+    stats_.current_filename = filename;
 
-    ESP_LOGI(TAG, "New file created successfully: %s", filename.c_str());
+    // Determine initial bytes and optionally line count if appending to existing file
+    long end_pos = ftell(current_file_);
+    size_t initial_bytes = (end_pos > 0) ? static_cast<size_t>(end_pos) : 0;
+    size_t initial_lines = 0;
+
+    if (append && !is_new_file) {
+        if (config_.count_lines_on_open) {
+            size_t line_count = 0;
+            size_t byte_count = 0;
+            if (scanExistingFileStats(full_path, line_count, byte_count)) {
+                initial_lines = line_count;
+                initial_bytes = byte_count;
+            }
+        } else {
+            // Only set bytes based on current file position; start counting new lines from 0
+            initial_lines = 0;
+        }
+    } else {
+        // New file path; start from zero
+        initial_lines = 0;
+    }
+
+    stats_.current_file_lines = initial_lines;
+    stats_.current_file_bytes = initial_bytes;
+
+    // Increment "files created" only when opening a brand new file for writing
+    if (!append) {
+        stats_.total_files_created++;
+    }
+
+    ESP_LOGI(TAG, "File open complete: %s (lines=%zu, bytes=%zu, created=%s)",
+             full_path.c_str(), stats_.current_file_lines, stats_.current_file_bytes, (!append ? "yes" : "no"));
+
     return true;
 }
 
@@ -767,6 +717,118 @@ bool SDCardLogSink::validateFilename(const std::string& filename) {
         return false;
     }
 
+    return true;
+}
+
+bool SDCardLogSink::fileExists(const std::string& full_path) {
+    struct stat st;
+    return (stat(full_path.c_str(), &st) == 0) && S_ISREG(st.st_mode);
+}
+
+std::string SDCardLogSink::buildDailyBaseFilename() {
+    time_t now;
+    time(&now);
+    return formatTimestamp(now) + config_.file_extension;
+}
+
+std::string SDCardLogSink::generateUniqueFilenameForToday() {
+    std::string date_str;
+    {
+        time_t now;
+        time(&now);
+        date_str = formatTimestamp(now);
+    }
+
+    // Try base first
+    std::string base = date_str + config_.file_extension;
+    std::string full_path = config_.mount_point + "/" + base;
+    if (!fileExists(full_path)) {
+        return base;
+    }
+
+    // Then try numbered suffixes
+    for (int sequence = 1; sequence <= 999; ++sequence) {
+        std::ostringstream oss;
+        oss << date_str << std::setfill('0') << std::setw(3) << sequence << config_.file_extension;
+        std::string candidate = oss.str();
+        std::string candidate_path = config_.mount_point + "/" + candidate;
+        if (!fileExists(candidate_path)) {
+            return candidate;
+        }
+    }
+
+    ESP_LOGW(TAG, "Too many files for date %s, using last fallback name", date_str.c_str());
+    return date_str + "999" + config_.file_extension;
+}
+
+bool SDCardLogSink::openFileForAppendOrWrite(const std::string& full_path, bool append, bool& is_new_file) {
+    const char* mode = append ? "a" : "w";
+    current_file_ = fopen(full_path.c_str(), mode);
+    if (!current_file_) {
+        int error_code = errno;
+        ESP_LOGE(TAG, "Failed to open file '%s' with mode '%s' (errno: %d - %s)",
+                 full_path.c_str(), mode, error_code, strerror(error_code));
+        handleSDCardError("Failed to open file: " + full_path);
+        return false;
+    }
+
+    // Position at end and determine if file is empty
+    if (fseek(current_file_, 0, SEEK_END) != 0) {
+        // If fseek fails, treat as new file
+        is_new_file = true;
+        return true;
+    }
+    long pos = ftell(current_file_);
+    if (pos < 0) pos = 0;
+    is_new_file = (pos == 0);
+    return true;
+}
+
+bool SDCardLogSink::scanExistingFileStats(const std::string& full_path, size_t& line_count, size_t& byte_count) {
+    FILE* f = fopen(full_path.c_str(), "r");
+    if (!f) {
+        int error_code = errno;
+        ESP_LOGW(TAG, "Failed to open file for scanning '%s' (errno: %d - %s)", full_path.c_str(), error_code, strerror(error_code));
+        return false;
+    }
+
+    static constexpr size_t BUF_SZ = 4096;
+    char buf[BUF_SZ];
+    size_t lines = 0;
+    size_t bytes_total = 0;
+
+    while (true) {
+        size_t n = fread(buf, 1, BUF_SZ, f);
+        if (n == 0) {
+            if (ferror(f)) {
+                ESP_LOGW(TAG, "Error while reading file during scan: %s", full_path.c_str());
+                fclose(f);
+                return false;
+            }
+            break; // EOF
+        }
+        bytes_total += n;
+        for (size_t i = 0; i < n; ++i) {
+            if (buf[i] == '\n') {
+                lines++;
+            }
+        }
+    }
+
+    // Use ftell to confirm byte count if possible
+    if (fseek(f, 0, SEEK_END) == 0) {
+        long end_pos = ftell(f);
+        if (end_pos >= 0) {
+            byte_count = static_cast<size_t>(end_pos);
+        } else {
+            byte_count = bytes_total;
+        }
+    } else {
+        byte_count = bytes_total;
+    }
+
+    line_count = lines;
+    fclose(f);
     return true;
 }
 

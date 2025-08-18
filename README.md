@@ -63,12 +63,31 @@ Build commands:
 The project includes several configuration files in the `data/` directory:
 - `wifi_config.txt`: WiFi credentials and settings
 - `mqtt_config.txt`: MQTT broker configuration
+- `timezone.txt`: POSIX TZ string used to set local timezone for file rotation (optional; defaults to Pacific with DST)
 
 These files are flashed to SPIFFS using:
 ```bash
 ./build_spiffs.sh
 ./flash_spiffs.sh
 ```
+
+### Timezone Configuration
+
+Daily SD card file rotation uses the device's local timezone (TZ) when computing the date for filenames and rotation boundaries. Configure the timezone by placing a POSIX TZ string in `data/timezone.txt` (flashed to `/spiffs/timezone.txt`).
+
+- Default (if file missing/empty): `PST8PDT,M3.2.0/2,M11.1.0/2` (Pacific with DST)
+- Arizona (no DST): `MST7`
+- New York: `EST5EDT,M3.2.0/2,M11.1.0/2`
+- UTC: `UTC`
+
+Example:
+```
+PST8PDT,M3.2.0/2,M11.1.0/2
+```
+
+Notes:
+- Rotation occurs at local midnight based on TZ; per-line CSV timestamps remain Unix epoch seconds.
+- After editing `data/timezone.txt`, re-run `./build_spiffs.sh && ./flash_spiffs.sh` to update the device.
 
 ## Project Layout
 - `main/main.cpp`: app_main initializes and polls autodetected BMS, manages logging
