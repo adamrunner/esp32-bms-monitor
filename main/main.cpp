@@ -16,7 +16,7 @@
 #include "wifi_manager.h"
 
 static const char *TAG = "bms_monitor";
-static constexpr uint32_t READ_INTERVAL_MS = 1000;
+static constexpr uint32_t READ_INTERVAL_MS = 10000;
 
 // BMS instances
 static bms_interface_t* bms_interface = NULL;
@@ -171,7 +171,7 @@ extern "C" void app_main(void)
             s.hours = hours;
             s.minutes = minutes;
             s.seconds = seconds;
-            
+
             // Set real timestamp from SNTP (fallback to current time if not sync'd)
             s.real_timestamp = sntp_manager.getCurrentTime();
 
