@@ -33,3 +33,6 @@ CRUSH.md
 version.txt
 
 __pycache__/
+
+# contains OTA deployment configuration and secrets
+ota_deploy_config.json
