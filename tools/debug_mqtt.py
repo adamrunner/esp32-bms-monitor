@@ -7,14 +7,40 @@ import paho.mqtt.client as mqtt
 import json
 import time
 import sys
+import os
+from pathlib import Path
 
-# Configuration (should match your ota_deploy_config.json)
-MQTT_BROKER = "anton.local"
-MQTT_PORT = 1883
-MQTT_USERNAME = "admin"
-MQTT_PASSWORD = "password1234"
-COMMAND_TOPIC = "bms/ota/command"
-STATUS_TOPIC = "bms/ota/status"
+def load_config():
+    """Load MQTT configuration from ota_deploy_config.json"""
+    config_file = "ota_deploy_config.json"
+
+    # Check if config file exists
+    if not os.path.exists(config_file):
+        print(f"Error: Configuration file '{config_file}' not found!")
+        print("Please run this script from the project root directory.")
+        sys.exit(1)
+
+    try:
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+        return config.get('mqtt', {})
+    except json.JSONDecodeError as e:
+        print(f"Error: Invalid JSON in configuration file: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error: Failed to read configuration file: {e}")
+        sys.exit(1)
+
+# Load configuration
+mqtt_config = load_config()
+
+# Configuration from ota_deploy_config.json
+MQTT_BROKER = mqtt_config.get("broker", "localhost")
+MQTT_PORT = mqtt_config.get("port", 1883)
+MQTT_USERNAME = mqtt_config.get("username", "")
+MQTT_PASSWORD = mqtt_config.get("password", "")
+COMMAND_TOPIC = mqtt_config.get("command_topic", "bms/ota/command")
+STATUS_TOPIC = mqtt_config.get("status_topic", "bms/ota/status")
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
