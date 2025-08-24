@@ -8,8 +8,8 @@ source /Users/adamrunner/esp/v5.5/esp-idf/export.sh
 # Define variables
 PROJECT_DIR="/Users/adamrunner/Code/esp32-bms-monitor"
 BUILD_DIR="$PROJECT_DIR/build"
-SPIFFS_SIZE="0x100000"  # 1MB as defined in partitions.csv
-SPIFFS_ADDRESS="0x210000"  # Address of storage partition as defined in partitions.csv
+SPIFFS_SIZE="0xc0000"  # 768KB as defined in partitions.csv
+SPIFFS_ADDRESS="0x320000"  # Address of storage partition as defined in partitions.csv
 DATA_DIR="$PROJECT_DIR/data"
 
 echo "ESP32 BMS Monitor SPIFFS Image Builder and Flasher"
@@ -65,11 +65,11 @@ echo
 # Try to flash with common serial ports
 FLASHED=false
 
-for PORT in "/dev/ttyUSB0" "/dev/ttyUSB1" "/dev/ttyACM0" "/dev/tty.usbserial-*" "/dev/tty.usbmodem1101"; do
+for PORT in "/dev/tty.usbmodem1101" "/dev/ttyUSB0" "/dev/ttyUSB1" "/dev/ttyACM0" "/dev/tty.usbserial-*"; do
     if [ -e "$PORT" ] || [[ "$PORT" == *"*" ]]; then
         echo "Trying to flash using port: $PORT"
         esptool.py --chip esp32c6 --port "$PORT" --baud 460800 write_flash $SPIFFS_ADDRESS "$BUILD_DIR/storage.bin"
-        
+
         if [ $? -eq 0 ]; then
             echo "SPIFFS image flashed successfully to $PORT!"
             FLASHED=true
