@@ -4,8 +4,8 @@ This file contains instructions for AI agents working on the ESP32 BMS Monitor p
 
 Before any of the build/flash commands, ensure that the ESP-IDF environment is set up correctly.
 Source the export script here to set it up for whichever shell
-fish: . /Users/adamrunner/esp/v5.5/esp-idf/export.fish
 bash/zsh: . /Users/adamrunner/esp/v5.5/esp-idf/export.sh
+
 Build/Flash
 - Build: idf.py build
 - Upload: idf.py flash
