@@ -1,0 +1,352 @@
+#include "ota_mqtt_commands.h"
+#include "ota_mqtt_config.h"
+#include "ota_manager.h"
+#include "ota_status_logger.h"
+#include <esp_log.h>
+#include <mqtt_client.h>
+#include <cJSON.h>
+#include <string.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+
+static const char *TAG = "ota_mqtt_commands";
+
+// Global MQTT client for OTA commands
+static esp_mqtt_client_handle_t g_ota_cmd_mqtt_client = NULL;
+static bool g_ota_cmd_mqtt_connected = false;
+static bool g_ota_cmd_mqtt_initialized = false;
+static char g_ota_cmd_topic[OTA_MQTT_TOPIC_MAX_LEN] = OTA_MQTT_DEFAULT_COMMAND_TOPIC;
+
+static ota_mqtt_config_t g_cmd_mqtt_config = {
+    .broker_host = OTA_MQTT_DEFAULT_HOST,
+    .broker_port = OTA_MQTT_DEFAULT_PORT,
+    .username = "",
+    .password = "",
+    .client_id = OTA_MQTT_COMMANDS_CLIENT_ID,
+    .qos = OTA_MQTT_DEFAULT_QOS,
+    .retain = OTA_MQTT_DEFAULT_RETAIN
+};
+
+// Forward declarations
+static void ota_cmd_mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data);
+static bool load_mqtt_config_from_spiffs(void);
+static void handle_ota_command(const char* payload, int payload_len);
+static void ota_update_task(void *pvParameter);
+
+esp_err_t ota_mqtt_commands_init(const char* command_topic)
+{
+    if (g_ota_cmd_mqtt_initialized) {
+        ESP_LOGW(TAG, "OTA MQTT commands already initialized");
+        return ESP_OK;
+    }
+
+    if (command_topic && strlen(command_topic) > 0) {
+        strncpy(g_ota_cmd_topic, command_topic, sizeof(g_ota_cmd_topic) - 1);
+        g_ota_cmd_topic[sizeof(g_ota_cmd_topic) - 1] = '\0';
+    }
+
+    // Load MQTT configuration from existing MQTT config file
+    if (!load_mqtt_config_from_spiffs()) {
+        ESP_LOGW(TAG, "Failed to load MQTT config, using defaults");
+    }
+
+    // Configure MQTT client
+    esp_mqtt_client_config_t mqtt_cfg = {0};
+    mqtt_cfg.broker.address.uri = NULL;
+    mqtt_cfg.broker.address.hostname = g_cmd_mqtt_config.broker_host;
+    mqtt_cfg.broker.address.port = g_cmd_mqtt_config.broker_port;
+    mqtt_cfg.broker.address.transport = MQTT_TRANSPORT_OVER_TCP;
+    mqtt_cfg.credentials.client_id = g_cmd_mqtt_config.client_id;
+
+    if (strlen(g_cmd_mqtt_config.username) > 0) {
+        mqtt_cfg.credentials.username = g_cmd_mqtt_config.username;
+        mqtt_cfg.credentials.authentication.password = g_cmd_mqtt_config.password;
+    }
+
+    mqtt_cfg.session.keepalive = OTA_MQTT_KEEPALIVE_SEC;
+    mqtt_cfg.session.disable_clean_session = OTA_MQTT_DISABLE_CLEAN_SESSION;
+    mqtt_cfg.network.timeout_ms = OTA_MQTT_TIMEOUT_MS;
+    mqtt_cfg.network.refresh_connection_after_ms = OTA_MQTT_REFRESH_CONNECTION_MS;
+
+    // Create MQTT client
+    g_ota_cmd_mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
+    if (!g_ota_cmd_mqtt_client) {
+        ESP_LOGE(TAG, "Failed to initialize MQTT client for commands");
+        return ESP_FAIL;
+    }
+
+    // Register event handler
+    esp_err_t ret = esp_mqtt_client_register_event(g_ota_cmd_mqtt_client, ESP_EVENT_ANY_ID, ota_cmd_mqtt_event_handler, NULL);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register MQTT event handler: %s", esp_err_to_name(ret));
+        esp_mqtt_client_destroy(g_ota_cmd_mqtt_client);
+        g_ota_cmd_mqtt_client = NULL;
+        return ret;
+    }
+
+    // Start MQTT client
+    ret = esp_mqtt_client_start(g_ota_cmd_mqtt_client);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start MQTT client: %s", esp_err_to_name(ret));
+        esp_mqtt_client_destroy(g_ota_cmd_mqtt_client);
+        g_ota_cmd_mqtt_client = NULL;
+        return ret;
+    }
+
+    g_ota_cmd_mqtt_initialized = true;
+    ESP_LOGI(TAG, "OTA MQTT commands initialized successfully");
+    ESP_LOGI(TAG, "Listening for OTA commands on topic: %s", g_ota_cmd_topic);
+
+    return ESP_OK;
+}
+
+void ota_mqtt_commands_shutdown(void)
+{
+    if (g_ota_cmd_mqtt_client) {
+        esp_mqtt_client_stop(g_ota_cmd_mqtt_client);
+        esp_mqtt_client_destroy(g_ota_cmd_mqtt_client);
+        g_ota_cmd_mqtt_client = NULL;
+    }
+
+    g_ota_cmd_mqtt_connected = false;
+    g_ota_cmd_mqtt_initialized = false;
+    ESP_LOGI(TAG, "OTA MQTT commands shutdown");
+}
+
+bool ota_mqtt_commands_is_connected(void)
+{
+    return g_ota_cmd_mqtt_connected;
+}
+
+static void ota_cmd_mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
+{
+    esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
+
+    switch ((esp_mqtt_event_id_t)event_id) {
+    case MQTT_EVENT_CONNECTED:
+        ESP_LOGI(TAG, "OTA commands MQTT connected");
+        g_ota_cmd_mqtt_connected = true;
+
+        // Subscribe to command topic
+        int msg_id = esp_mqtt_client_subscribe(g_ota_cmd_mqtt_client, g_ota_cmd_topic, g_cmd_mqtt_config.qos);
+        ESP_LOGI(TAG, "Subscribed to OTA command topic, msg_id=%d", msg_id);
+        break;
+
+    case MQTT_EVENT_DISCONNECTED:
+        ESP_LOGI(TAG, "OTA commands MQTT disconnected");
+        g_ota_cmd_mqtt_connected = false;
+        break;
+
+    case MQTT_EVENT_SUBSCRIBED:
+        ESP_LOGI(TAG, "OTA commands subscription successful, msg_id=%d", event->msg_id);
+        break;
+
+    case MQTT_EVENT_UNSUBSCRIBED:
+        ESP_LOGI(TAG, "OTA commands unsubscribed, msg_id=%d", event->msg_id);
+        break;
+
+    case MQTT_EVENT_DATA:
+        ESP_LOGI(TAG, "Received OTA command: topic=%.*s, data=%.*s",
+                 event->topic_len, event->topic,
+                 event->data_len, event->data);
+
+        // Handle the command
+        if (strncmp(event->topic, g_ota_cmd_topic, event->topic_len) == 0) {
+            handle_ota_command(event->data, event->data_len);
+        }
+        break;
+
+    case MQTT_EVENT_ERROR:
+        ESP_LOGE(TAG, "OTA commands MQTT error occurred");
+        g_ota_cmd_mqtt_connected = false;
+        break;
+
+    default:
+        ESP_LOGD(TAG, "OTA commands MQTT event: %d", event_id);
+        break;
+    }
+}
+
+static bool load_mqtt_config_from_spiffs(void)
+{
+    FILE *file = fopen("/spiffs/mqtt_config.txt", "r");
+    if (!file) {
+        ESP_LOGD(TAG, "MQTT config file not found, using defaults");
+        return false;
+    }
+
+    char line[256];
+    bool config_loaded = false;
+
+    while (fgets(line, sizeof(line), file)) {
+        // Remove newline
+        line[strcspn(line, "\n")] = 0;
+        line[strcspn(line, "\r")] = 0;
+
+        // Skip comments and empty lines
+        if (line[0] == '#' || line[0] == '\0') {
+            continue;
+        }
+
+        char* eq_pos = strchr(line, '=');
+        if (eq_pos) {
+            *eq_pos = '\0'; // Split string
+            char* key = line;
+            char* value = eq_pos + 1;
+
+            // Trim whitespace
+            while (*key && (*key == ' ' || *key == '\t')) key++;
+            char* key_end = key + strlen(key) - 1;
+            while (key_end > key && (*key_end == ' ' || *key_end == '\t')) key_end--;
+            *(key_end + 1) = '\0';
+
+            while (*value && (*value == ' ' || *value == '\t')) value++;
+            char* value_end = value + strlen(value) - 1;
+            while (value_end > value && (*value_end == ' ' || *value_end == '\t')) value_end--;
+            *(value_end + 1) = '\0';
+
+            // Parse configuration values
+            if (strcmp(key, "host") == 0) {
+                strncpy(g_cmd_mqtt_config.broker_host, value, sizeof(g_cmd_mqtt_config.broker_host) - 1);
+                g_cmd_mqtt_config.broker_host[sizeof(g_cmd_mqtt_config.broker_host) - 1] = '\0';
+                config_loaded = true;
+            }
+            else if (strcmp(key, "port") == 0) {
+                int port = atoi(value);
+                if (port > 0 && port <= 65535) {
+                    g_cmd_mqtt_config.broker_port = port;
+                }
+            }
+            else if (strcmp(key, "username") == 0) {
+                strncpy(g_cmd_mqtt_config.username, value, sizeof(g_cmd_mqtt_config.username) - 1);
+                g_cmd_mqtt_config.username[sizeof(g_cmd_mqtt_config.username) - 1] = '\0';
+            }
+            else if (strcmp(key, "password") == 0) {
+                strncpy(g_cmd_mqtt_config.password, value, sizeof(g_cmd_mqtt_config.password) - 1);
+                g_cmd_mqtt_config.password[sizeof(g_cmd_mqtt_config.password) - 1] = '\0';
+            }
+            else if (strcmp(key, "qos") == 0) {
+                int qos = atoi(value);
+                if (qos >= 0 && qos <= 2) {
+                    g_cmd_mqtt_config.qos = qos;
+                }
+            }
+        }
+    }
+
+    fclose(file);
+
+    if (config_loaded) {
+        ESP_LOGI(TAG, "MQTT configuration loaded for OTA commands: %s:%d",
+                 g_cmd_mqtt_config.broker_host, g_cmd_mqtt_config.broker_port);
+    } else {
+        ESP_LOGW(TAG, "No valid MQTT configuration found, using defaults");
+    }
+
+    return config_loaded;
+}
+
+static void handle_ota_command(const char* payload, int payload_len)
+{
+    if (!payload || payload_len <= 0) {
+        ESP_LOGW(TAG, "Empty OTA command received");
+        return;
+    }
+
+    // Null-terminate the payload for parsing
+    char *command_str = malloc(payload_len + 1);
+    if (!command_str) {
+        ESP_LOGE(TAG, "Failed to allocate memory for command parsing");
+        return;
+    }
+
+    memcpy(command_str, payload, payload_len);
+    command_str[payload_len] = '\0';
+
+    // Parse JSON command
+    cJSON *json = cJSON_Parse(command_str);
+    free(command_str);
+
+    if (!json) {
+        ESP_LOGE(TAG, "Failed to parse OTA command JSON");
+        return;
+    }
+
+    cJSON *action = cJSON_GetObjectItem(json, "action");
+    if (!cJSON_IsString(action)) {
+        ESP_LOGE(TAG, "OTA command missing 'action' field");
+        cJSON_Delete(json);
+        return;
+    }
+
+    ESP_LOGI(TAG, "Processing OTA command: %s", action->valuestring);
+
+    if (strcmp(action->valuestring, "update") == 0) {
+        // Handle update command
+        cJSON *force = cJSON_GetObjectItem(json, "force");
+        bool force_update = cJSON_IsTrue(force);
+
+        ESP_LOGI(TAG, "Starting OTA update (force: %s)", force_update ? "true" : "false");
+
+        // Create a task to handle the update (to avoid blocking MQTT)
+        BaseType_t result = xTaskCreate(ota_update_task, "ota_update", 4096, (void*)force_update, 5, NULL);
+        if (result != pdPASS) {
+            ESP_LOGE(TAG, "Failed to create OTA update task");
+        }
+
+    } else if (strcmp(action->valuestring, "check") == 0) {
+        // Handle check command
+        char available_version[32];
+        esp_err_t check_result = ota_manager_check_update(available_version, sizeof(available_version));
+
+        if (check_result == ESP_OK) {
+            ESP_LOGI(TAG, "Update available: %s", available_version);
+            ota_status_logger_set_available_version(available_version);
+            // Send status update indicating update is available
+            ota_status_progress_callback(OTA_STATUS_IDLE, 0, "Update available");
+        } else {
+            ESP_LOGI(TAG, "No update available");
+            ota_status_logger_set_available_version("");
+            // Send status update indicating no update is available
+            ota_status_progress_callback(OTA_STATUS_IDLE, 0, "No update available");
+        }
+
+    } else if (strcmp(action->valuestring, "rollback") == 0) {
+        // Handle rollback command
+        ESP_LOGI(TAG, "Triggering OTA rollback");
+        esp_err_t rollback_result = ota_manager_rollback();
+        if (rollback_result != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to trigger rollback: %s", esp_err_to_name(rollback_result));
+        }
+
+    } else if (strcmp(action->valuestring, "status") == 0) {
+        // Handle status request
+        ota_status_t status = ota_manager_get_status();
+        char version[32];
+        ota_manager_get_version(version, sizeof(version));
+        bool rollback_pending = ota_manager_is_rollback_pending();
+
+        ESP_LOGI(TAG, "OTA Status - Status: %d, Version: %s, Rollback pending: %s",
+                 status, version, rollback_pending ? "true" : "false");
+
+    } else {
+        ESP_LOGW(TAG, "Unknown OTA command: %s", action->valuestring);
+    }
+
+    cJSON_Delete(json);
+}
+
+static void ota_update_task(void *pvParameter)
+{
+    bool force_update = (bool)pvParameter;
+
+    ESP_LOGI(TAG, "OTA update task started");
+
+    esp_err_t result = ota_manager_start_update(force_update);
+    if (result != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start OTA update: %s", esp_err_to_name(result));
+    }
+
+    ESP_LOGI(TAG, "OTA update task completed");
+    vTaskDelete(NULL);
+}

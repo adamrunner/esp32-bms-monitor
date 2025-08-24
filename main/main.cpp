@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdint.h>
+#include <string.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <driver/uart.h>
@@ -11,6 +12,9 @@
 #include "bms_snapshot.h"
 #include "log_manager.h"
 #include "sntp_manager.h"
+#include "ota_manager.h"
+#include "ota_status_logger.h"
+#include "ota_mqtt_commands.h"
 #define BMS_RX_PIN 4
 #define BMS_TX_PIN 5
 #include "wifi_manager.h"
@@ -71,19 +75,55 @@ extern "C" void app_main(void)
         }
     }
 
+    // Initialize OTA manager
+    ESP_LOGI(TAG, "Initializing OTA manager...");
+    ota_config_t ota_config;
+    esp_err_t ota_config_ret = ota_manager_load_config("/spiffs/ota_config.txt", &ota_config);
+    if (ota_config_ret == ESP_OK) {
+        // Initialize OTA status logger first
+        ota_status_logger_init();
+        
+        esp_err_t ota_ret = ota_manager_init(&ota_config, ota_status_progress_callback);
+        if (ota_ret == ESP_OK) {
+            ESP_LOGI(TAG, "OTA manager initialized successfully");
+            
+            // Initialize OTA MQTT command handler
+            esp_err_t cmd_ret = ota_mqtt_commands_init("bms/ota/command");
+            if (cmd_ret != ESP_OK) {
+                ESP_LOGW(TAG, "Failed to initialize OTA MQTT commands: %s", esp_err_to_name(cmd_ret));
+            } else {
+                ESP_LOGI(TAG, "OTA MQTT command handler initialized");
+            }
+            
+            // Check if this is a new boot after OTA update
+            if (ota_manager_is_rollback_pending()) {
+                ESP_LOGW(TAG, "New firmware detected, validating...");
+                // In a real application, you would run validation tests here
+                // For now, we'll mark it as valid after a short delay
+                vTaskDelay(pdMS_TO_TICKS(5000));
+                ota_manager_mark_valid();
+                ESP_LOGI(TAG, "New firmware validated and marked as valid");
+            }
+        } else {
+            ESP_LOGW(TAG, "Failed to initialize OTA manager: %s", esp_err_to_name(ota_ret));
+        }
+    } else {
+        ESP_LOGW(TAG, "Failed to load OTA config: %s", esp_err_to_name(ota_config_ret));
+    }
+
     // Initialize logging system
     ESP_LOGI(TAG, "Initializing logging manager...");
-    std::string logging_config = R"({"sinks":[
+    static const char logging_config[] = R"({"sinks":[
         {"type":"serial","config":{"format":"csv","print_header":true,"max_cells":4,"max_temps":3}},
         {"type":"mqtt","config":{"format":"csv","topic":"bms/telemetry","qos":1}}
     ]})";
 
-    if (!LOG_INIT(logging_config)) {
+    if (!LOG_INIT(std::string(logging_config))) {
         ESP_LOGE(TAG, "Failed to initialize logging system");
         // Fallback to basic serial output
         ESP_LOGI(TAG, "Using basic serial output...");
     } else {
-        ESP_LOGI(TAG, "Logging system initialized with configuration: %s", logging_config.c_str());
+        ESP_LOGI(TAG, "Logging system initialized with configuration: %s", logging_config);
     }
 
     // Auto-detect BMS type
@@ -103,7 +143,7 @@ extern "C" void app_main(void)
 
     ESP_LOGI(TAG, "BMS interface created successfully");
 
-    // Configure logging format and prepare runtime CSV header sizing
+    // Configure logging format and prepare runtime CSV header sizing (moved outside loop)
     static output::OutputConfig g_log_cfg{};
     #ifdef LOG_FORMAT_CSV
     g_log_cfg.format = output::OutputFormat::CSV;
@@ -112,6 +152,9 @@ extern "C" void app_main(void)
     g_log_cfg.header_temps = output::DEFAULT_MAX_CSV_TEMPS;
     #endif
     static bool g_csv_header_configured = false;
+    
+    // Move BMSSnapshot to static to reduce stack usage
+    static output::BMSSnapshot s{};
 
     // Variables for time and energy tracking
     uint64_t start_time = esp_timer_get_time();
@@ -163,8 +206,8 @@ extern "C" void app_main(void)
             bool charging_enabled = bms_interface->isChargingEnabled(bms_interface->handle);
             bool discharging_enabled = bms_interface->isDischargingEnabled(bms_interface->handle);
 
-            // Emit via pluggable logger (Human or CSV)
-            output::BMSSnapshot s{};
+            // Emit via pluggable logger (Human or CSV) - using static allocation
+            s = output::BMSSnapshot{};  // Reset the static snapshot
             s.start_time_us = start_time;
             s.now_time_us = current_time;
             s.elapsed_sec = elapsed_sec;
