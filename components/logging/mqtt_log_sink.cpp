@@ -7,6 +7,7 @@
 #include <cJSON.h>
 #include <esp_spiffs.h>
 #include <esp_system.h>
+#include <esp_mac.h>
 
 using namespace logging;
 
@@ -348,9 +349,19 @@ bool MQTTLogSink::connectMQTT() {
     if (!config_.password.empty()) {
         mqtt_config.credentials.authentication.password = config_.password.c_str();
     }
-    if (!config_.client_id.empty()) {
-        mqtt_config.credentials.client_id = config_.client_id.c_str();
+    // Use explicit client_id if provided; otherwise, generate from MAC
+    std::string client_id_to_use = config_.client_id;
+    if (client_id_to_use.empty() || client_id_to_use == "bms_mqtt_client") {
+        client_id_to_use = generateMacBasedClientId();
+        if (client_id_to_use.empty()) {
+            ESP_LOGW(TAG, "Falling back to default MQTT client_id");
+            client_id_to_use = config_.client_id; // default
+        } else {
+            // persist for logging and future use in this session
+            config_.client_id = client_id_to_use;
+        }
     }
+    mqtt_config.credentials.client_id = client_id_to_use.c_str();
 
     mqtt_config.session.keepalive = config_.keep_alive;
     mqtt_config.session.disable_clean_session = !config_.clean_session;
@@ -403,6 +414,20 @@ void MQTTLogSink::disconnectMQTT() {
         mqtt_client_ = nullptr;
     }
     connected_ = false;
+}
+
+std::string MQTTLogSink::generateMacBasedClientId() {
+    uint8_t mac[6] = {0};
+    esp_err_t err = esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "esp_read_mac failed: 0x%x", err);
+        return std::string();
+    }
+    char buf[32];
+    // Format without separators for client ID safety
+    snprintf(buf, sizeof(buf), "bms-%02X%02X%02X%02X%02X%02X",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    return std::string(buf);
 }
 
 void MQTTLogSink::mqttEventHandler(void* handler_args, esp_event_base_t base, int32_t event_id, void* event_data) {
