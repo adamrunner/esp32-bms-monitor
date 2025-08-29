@@ -36,3 +36,5 @@ __pycache__/
 
 # contains OTA deployment configuration and secrets
 ota_deploy_config.json
+
+managed_components/

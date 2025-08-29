@@ -8,6 +8,7 @@
 #include <esp_spiffs.h>
 #include <esp_system.h>
 #include <esp_mac.h>
+#include "status_led.h"
 
 using namespace logging;
 
@@ -84,6 +85,9 @@ bool MQTTLogSink::send(const output::BMSSnapshot& data) {
 
     messages_published_++;
     bytes_published_ += serialized.length();
+
+    // Notify status LED of telemetry publish (blue TX badge)
+    status_led_notify_net_telemetry_tx();
 
     ESP_LOGD(TAG, "Published MQTT message (ID: %d, %zu bytes) to topic: %s",
              msg_id, serialized.length(), config_.topic.c_str());

@@ -12,7 +12,7 @@ set(srcs
 idf_component_register(
     SRCS ${srcs}
     INCLUDE_DIRS "."
-    REQUIRES 
+    REQUIRES
         esp_wifi
         esp_netif
         log
@@ -20,7 +20,8 @@ idf_component_register(
         main
         json
         mqtt
-    PRIV_REQUIRES 
+        status_led
+    PRIV_REQUIRES
         nvs_flash
         esp_http_client
         spiffs
