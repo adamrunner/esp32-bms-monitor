@@ -69,7 +69,7 @@ for PORT in "/dev/ttyUSB0" "/dev/ttyUSB1" "/dev/ttyACM0" "/dev/tty.usbserial-*" 
     if [ -e "$PORT" ] || [[ "$PORT" == *"*" ]]; then
         echo "Trying to flash using port: $PORT"
         esptool.py --chip esp32c6 --port "$PORT" --baud 460800 write_flash $SPIFFS_ADDRESS "$BUILD_DIR/storage.bin"
-        
+
         if [ $? -eq 0 ]; then
             echo "SPIFFS image flashed successfully to $PORT!"
             FLASHED=true

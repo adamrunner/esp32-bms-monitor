@@ -100,6 +100,7 @@ bool SerialLogSink::send(const output::BMSSnapshot& data) {
         std::cout.flush();
     }
     else {
+<<<<<<< HEAD
         // Print header if the serializer supports it
         if (config_.print_header && !printed_header_ && serializer_->hasHeader()) {
             std::string header = serializer_->getHeader();
@@ -107,6 +108,25 @@ bool SerialLogSink::send(const output::BMSSnapshot& data) {
                 std::cout << header;
                 printed_header_ = true;
             }
+=======
+        // For CSV format, optionally print header first
+        if (config_.format == "csv" && config_.print_header && !printed_header_) {
+            // Print CSV header
+            std::cout << "timestamp,elapsed_sec,hours:minutes:seconds,total_energy_wh,pack_voltage_v,pack_current_a,soc_pct,power_w,full_capacity_ah,peak_current_a,peak_power_w,cell_count,min_cell_voltage_v,min_cell_num,max_cell_voltage_v,max_cell_num,cell_voltage_delta_v,temp_count,min_temp_c,max_temp_c,charging_enabled,discharging_enabled";
+
+            // Add cell voltage headers
+            for (int i = 0; i < config_.max_cells; ++i) {
+                std::cout << ",cell_v_" << (i+1);
+            }
+
+            // Add temperature headers
+            for (int i = 0; i < config_.max_temps; ++i) {
+                std::cout << ",temp_c_" << (i+1);
+            }
+
+            std::cout << "\n";
+            printed_header_ = true;
+>>>>>>> esp-idf
         }
 
         // JSON or CSV format - send as-is

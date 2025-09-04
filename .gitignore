@@ -29,3 +29,13 @@ CRUSH.md
 
 # Crush agent directory
 .crush
+
+# OTA temporary version file
+version.txt
+
+__pycache__/
+
+# contains OTA deployment configuration and secrets
+ota_deploy_config.json
+
+managed_components/

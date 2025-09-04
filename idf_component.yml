@@ -1,0 +1,9 @@
+## IDF Component Manager Manifest File
+## This file is used by the ESP-IDF Component Manager to manage dependencies
+## and project configuration
+
+dependencies:
+  # Include any component dependencies here if needed
+  
+## Project-specific extensions
+project_include: "tools/project_include.cmake"

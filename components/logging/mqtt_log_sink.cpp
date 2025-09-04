@@ -7,6 +7,11 @@
 #include <cJSON.h>
 #include <esp_spiffs.h>
 #include <esp_system.h>
+<<<<<<< HEAD
+=======
+#include <esp_mac.h>
+#include "status_led.h"
+>>>>>>> esp-idf
 
 using namespace logging;
 
@@ -84,6 +89,12 @@ bool MQTTLogSink::send(const output::BMSSnapshot& data) {
     messages_published_++;
     bytes_published_ += serialized.length();
 
+<<<<<<< HEAD
+=======
+    // Notify status LED of telemetry publish (blue TX badge)
+    status_led_notify_net_telemetry_tx();
+
+>>>>>>> esp-idf
     ESP_LOGD(TAG, "Published MQTT message (ID: %d, %zu bytes) to topic: %s",
              msg_id, serialized.length(), config_.topic.c_str());
 
@@ -348,9 +359,25 @@ bool MQTTLogSink::connectMQTT() {
     if (!config_.password.empty()) {
         mqtt_config.credentials.authentication.password = config_.password.c_str();
     }
+<<<<<<< HEAD
     if (!config_.client_id.empty()) {
         mqtt_config.credentials.client_id = config_.client_id.c_str();
     }
+=======
+    // Use explicit client_id if provided; otherwise, generate from MAC
+    std::string client_id_to_use = config_.client_id;
+    if (client_id_to_use.empty() || client_id_to_use == "bms_mqtt_client") {
+        client_id_to_use = generateMacBasedClientId();
+        if (client_id_to_use.empty()) {
+            ESP_LOGW(TAG, "Falling back to default MQTT client_id");
+            client_id_to_use = config_.client_id; // default
+        } else {
+            // persist for logging and future use in this session
+            config_.client_id = client_id_to_use;
+        }
+    }
+    mqtt_config.credentials.client_id = client_id_to_use.c_str();
+>>>>>>> esp-idf
 
     mqtt_config.session.keepalive = config_.keep_alive;
     mqtt_config.session.disable_clean_session = !config_.clean_session;
@@ -405,6 +432,23 @@ void MQTTLogSink::disconnectMQTT() {
     connected_ = false;
 }
 
+<<<<<<< HEAD
+=======
+std::string MQTTLogSink::generateMacBasedClientId() {
+    uint8_t mac[6] = {0};
+    esp_err_t err = esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "esp_read_mac failed: 0x%x", err);
+        return std::string();
+    }
+    char buf[32];
+    // Format without separators for client ID safety
+    snprintf(buf, sizeof(buf), "bms-%02X%02X%02X%02X%02X%02X",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    return std::string(buf);
+}
+
+>>>>>>> esp-idf
 void MQTTLogSink::mqttEventHandler(void* handler_args, esp_event_base_t base, int32_t event_id, void* event_data) {
     esp_mqtt_event_handle_t event = static_cast<esp_mqtt_event_handle_t>(event_data);
 

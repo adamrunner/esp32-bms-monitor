@@ -7,6 +7,10 @@
 
 // ESP-IDF includes
 #include <mqtt_client.h>
+<<<<<<< HEAD
+=======
+#include <esp_mac.h>
+>>>>>>> esp-idf
 
 namespace logging {
 
@@ -50,6 +54,10 @@ private:
     bool parseConfig(const std::string& config_str);
     bool loadSpiffsConfig();
     bool connectMQTT();
+<<<<<<< HEAD
+=======
+    std::string generateMacBasedClientId();
+>>>>>>> esp-idf
     void disconnectMQTT();
     void mqttEventHandler(void* handler_args, esp_event_base_t base, int32_t event_id, void* event_data);
 
