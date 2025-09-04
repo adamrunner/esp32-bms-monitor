@@ -1,5 +1,4 @@
 #include "log_manager.h"
-#include <algorithm>
 #include <time.h>
 #include <esp_log.h>
 #include <cJSON.h>
