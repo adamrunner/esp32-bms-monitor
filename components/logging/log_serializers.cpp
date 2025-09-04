@@ -127,7 +127,6 @@ public:
  */
 class CSVSerializer : public BMSSerializer {
 private:
-    bool header_printed_ = false;
     output::OutputConfig cfg_;
 
 public:

@@ -57,7 +57,6 @@ public:
     virtual std::string getContentType() const = 0;
 
     /**
-<<<<<<< HEAD
      * Get header string for the serialization format
      * @return header string (empty if no header needed)
      */
@@ -70,8 +69,6 @@ public:
     virtual bool hasHeader() const { return true; }
 
     /**
-=======
->>>>>>> esp-idf
      * Check if batching/multiple records are supported
      * @return true if batching supported
      */

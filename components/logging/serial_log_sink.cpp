@@ -1,8 +1,6 @@
 #include "serial_log_sink.h"
-#include <tuple>
 #include <iostream>
 #include <iomanip>
-#include <limits>
 
 // ESP-IDF includes
 #include <esp_log.h>
@@ -53,15 +51,13 @@ bool SerialLogSink::init(const std::string& config) {
         return false;
     }
 
-    // Initialize UART for debug output (if not already initialized)
-    // Note: In ESP-IDF, this is typically done already
-
     initialized_ = true;
     return true;
 }
 
 bool SerialLogSink::send(const output::BMSSnapshot& data) {
-    if (!initialized_ || !isReady()) {
+    if (!initialized_) {
+        setLastError("Serial sink not initialized");
         return false;
     }
 
@@ -71,36 +67,29 @@ bool SerialLogSink::send(const output::BMSSnapshot& data) {
         return false;
     }
 
-    // Print based on format
+    // For "human" format, we'll add some formatting
     if (config_.format == "human") {
-        // Human-friendly format - manually format
-        std::cout << "\n=== BMS Monitor Data ===\n";
-        std::cout << "Elapsed Time: " << std::setfill('0') << std::setw(2) << data.hours << ":"
-                  << std::setw(2) << data.minutes << ":" << std::setw(2) << data.seconds << "\n";
-        std::cout << "Total Energy: " << data.total_energy_wh << " Wh\n";
-        std::cout << "Pack Voltage: " << data.pack_voltage_v << " V\n";
-        std::cout << "Pack Current: " << data.pack_current_a << " A\n";
-        std::cout << "State of Charge: " << data.soc_pct << " %\n";
-        std::cout << "Power: " << data.power_w << " W\n";
-        std::cout << "Peak Current: " << data.peak_current_a << " A\n";
-        std::cout << "Peak Power: " << data.peak_power_w << " W\n";
-        std::cout << "Cell Count: " << data.cell_count << "\n";
-        std::cout << "Voltage Range: " << data.min_cell_voltage_v << " V - " << data.max_cell_voltage_v << " V\n";
-
-        std::cout << "Individual Cell Voltages:\n";
-        for (int i = 0; i < data.cell_count; ++i) {
-            std::cout << "  Cell " << (i+1) << ": " << data.cell_v[i] << " V\n";
-        }
-
-        std::cout << "Temperatures:\n";
-        for (int i = 0; i < data.temp_count; ++i) {
-            std::cout << "  Temp " << (i+1) << ": " << data.temp_c[i] << " °C\n";
-        }
-
-        std::cout.flush();
+        // For human-readable format, we'll print a formatted version
+        std::cout << "=== BMS Reading ===" << std::endl;
+        std::cout << "Timestamp: " << data.now_time_us << std::endl;
+        std::cout << "Elapsed Time: " << data.hours << ":" << data.minutes << ":" << data.seconds << std::endl;
+        std::cout << "Energy (Wh): " << std::fixed << std::setprecision(2) << data.total_energy_wh << std::endl;
+        std::cout << "Pack Voltage (V): " << std::fixed << std::setprecision(2) << data.pack_voltage_v << std::endl;
+        std::cout << "Pack Current (A): " << std::fixed << std::setprecision(2) << data.pack_current_a << std::endl;
+        std::cout << "State of Charge (%): " << std::fixed << std::setprecision(1) << data.soc_pct << std::endl;
+        std::cout << "Power (W): " << std::fixed << std::setprecision(2) << data.power_w << std::endl;
+        std::cout << "Cells: " << data.cell_count << std::endl;
+        std::cout << "Min Cell Voltage (V): " << std::fixed << std::setprecision(3) << data.min_cell_voltage_v << std::endl;
+        std::cout << "Max Cell Voltage (V): " << std::fixed << std::setprecision(3) << data.max_cell_voltage_v << std::endl;
+        std::cout << "Cell Voltage Delta (V): " << std::fixed << std::setprecision(3) << data.cell_voltage_delta_v << std::endl;
+        std::cout << "Temperatures: " << data.temp_count << std::endl;
+        std::cout << "Min Temperature (°C): " << std::fixed << std::setprecision(1) << data.min_temp_c << std::endl;
+        std::cout << "Max Temperature (°C): " << std::fixed << std::setprecision(1) << data.max_temp_c << std::endl;
+        std::cout << "Charging Enabled: " << (data.charging_enabled ? "Yes" : "No") << std::endl;
+        std::cout << "Discharging Enabled: " << (data.discharging_enabled ? "Yes" : "No") << std::endl;
+        std::cout << "==================" << std::endl;
     }
     else {
-<<<<<<< HEAD
         // Print header if the serializer supports it
         if (config_.print_header && !printed_header_ && serializer_->hasHeader()) {
             std::string header = serializer_->getHeader();
@@ -108,25 +97,6 @@ bool SerialLogSink::send(const output::BMSSnapshot& data) {
                 std::cout << header;
                 printed_header_ = true;
             }
-=======
-        // For CSV format, optionally print header first
-        if (config_.format == "csv" && config_.print_header && !printed_header_) {
-            // Print CSV header
-            std::cout << "timestamp,elapsed_sec,hours:minutes:seconds,total_energy_wh,pack_voltage_v,pack_current_a,soc_pct,power_w,full_capacity_ah,peak_current_a,peak_power_w,cell_count,min_cell_voltage_v,min_cell_num,max_cell_voltage_v,max_cell_num,cell_voltage_delta_v,temp_count,min_temp_c,max_temp_c,charging_enabled,discharging_enabled";
-
-            // Add cell voltage headers
-            for (int i = 0; i < config_.max_cells; ++i) {
-                std::cout << ",cell_v_" << (i+1);
-            }
-
-            // Add temperature headers
-            for (int i = 0; i < config_.max_temps; ++i) {
-                std::cout << ",temp_c_" << (i+1);
-            }
-
-            std::cout << "\n";
-            printed_header_ = true;
->>>>>>> esp-idf
         }
 
         // JSON or CSV format - send as-is

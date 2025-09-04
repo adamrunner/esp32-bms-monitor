@@ -2,10 +2,6 @@
 #define LOG_MANAGER_H
 
 #include "log_sink.h"
-<<<<<<< HEAD
-#include "log_serializers.h"
-=======
->>>>>>> esp-idf
 #include "bms_snapshot.h"
 #include <memory>
 #include <vector>
