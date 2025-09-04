@@ -316,7 +316,16 @@ extern "C" void app_main(void)
             {
                 bms_led_metrics_t bm = {
                     .valid = true,
-                    .comm_ok = false
+                    .comm_ok = false,
+                    .soc_pct = 0.0f,
+                    .charging_enabled = false,
+                    .discharging_enabled = false,
+                    .max_temp_c = 0.0f,
+                    .min_temp_c = 0.0f,
+                    .cell_delta_v = 0.0f,
+                    .mosfet_fault = false,
+                    .ov_critical = false,
+                    .uv_critical = false
                 };
                 status_led_notify_bms(&bm);
             }

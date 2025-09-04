@@ -12,6 +12,10 @@ project(esp32-bms-monitor)
 # Enable WiFi and networking components
 set(COMPONENTS main wifi_manager)
 
+# enable compile_commands.json generation
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+
 # Set custom partition table
 set(PARTITION_TABLE_CUSTOM_FILENAME "partitions.csv")
 set(CONFIG_PARTITION_TABLE_CUSTOM ON)
@@ -22,7 +26,7 @@ set(CONFIG_PARTITION_TABLE_CUSTOM ON)
 
 # OTA Deployment Commands (provided by idf_ext.py):
 # idf.py ota_config  - Configure OTA deployment settings
-# idf.py ota_check   - Check for available OTA updates  
+# idf.py ota_check   - Check for available OTA updates
 # idf.py ota_flash   - Deploy firmware via OTA
 # idf.py ota_flash --force  - Force deployment (skip version check)
 # See OTA_DEPLOYMENT_GUIDE.md for full documentation
