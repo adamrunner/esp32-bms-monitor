@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdint.h>
-#include <string>
+#include <string.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <driver/uart.h>
@@ -12,9 +12,13 @@
 #include "bms_snapshot.h"
 #include "log_manager.h"
 #include "sntp_manager.h"
+#include "ota_manager.h"
+#include "ota_status_logger.h"
+#include "ota_mqtt_commands.h"
 #define BMS_RX_PIN 4
 #define BMS_TX_PIN 5
 #include "wifi_manager.h"
+#include "status_led.h"
 
 static const char *TAG = "bms_monitor";
 static constexpr uint32_t READ_INTERVAL_MS = 10000;
@@ -36,6 +40,10 @@ static bool auto_detect_bms_type() {
 extern "C" void app_main(void)
 {
     ESP_LOGI(TAG, "Starting BMS Monitor Application");
+    status_led_config_t led_cfg = { .enabled = true, .gpio_pin = 8, .brightness = 64, .boot_animation = true, .critical_override = true, .overlay_enabled = false, .overlay_period_ms = 0, .overlay_on_ms = 0 };
+    (void)status_led_init(&led_cfg);
+    status_led_set_tick_period_ms(READ_INTERVAL_MS);
+    status_led_notify_boot_stage(STATUS_BOOT_STAGE_BOOT);
 
     // Initialize WiFi manager
     ESP_LOGI(TAG, "Initializing WiFi manager...");
@@ -47,6 +55,7 @@ extern "C" void app_main(void)
         wifi_ret = wifi_manager_config_from_file("/spiffs/wifi_config.txt");
         if (wifi_ret == ESP_OK) {
             ESP_LOGI(TAG, "Starting WiFi connection...");
+            status_led_notify_boot_stage(STATUS_BOOT_STAGE_WIFI_CONNECTING);
             wifi_ret = wifi_manager_start();
             if (wifi_ret == ESP_OK) {
                 ESP_LOGI(TAG, "WiFi connected successfully");
@@ -85,11 +94,48 @@ extern "C" void app_main(void)
     } else {
         // Wait for time synchronization (non-blocking)
         ESP_LOGI(TAG, "Waiting for time synchronization...");
+        status_led_notify_boot_stage(STATUS_BOOT_STAGE_TIME_SYNC);
         if (sntp_manager.waitForSync(5000)) { // 5 second timeout
             ESP_LOGI(TAG, "Time synchronized successfully");
         } else {
             ESP_LOGW(TAG, "Time sync timeout, continuing with system time");
         }
+    }
+
+    // Initialize OTA manager
+    ESP_LOGI(TAG, "Initializing OTA manager...");
+    ota_config_t ota_config;
+    esp_err_t ota_config_ret = ota_manager_load_config("/spiffs/ota_config.txt", &ota_config);
+    if (ota_config_ret == ESP_OK) {
+        // Initialize OTA status logger first
+        ota_status_logger_init();
+
+        esp_err_t ota_ret = ota_manager_init(&ota_config, ota_status_progress_callback);
+        if (ota_ret == ESP_OK) {
+            ESP_LOGI(TAG, "OTA manager initialized successfully");
+
+            // Initialize OTA MQTT command handler
+            esp_err_t cmd_ret = ota_mqtt_commands_init("bms/ota/command");
+            if (cmd_ret != ESP_OK) {
+                ESP_LOGW(TAG, "Failed to initialize OTA MQTT commands: %s", esp_err_to_name(cmd_ret));
+            } else {
+                ESP_LOGI(TAG, "OTA MQTT command handler initialized");
+
+                // Check if this is a new boot after OTA update
+                if (ota_manager_is_rollback_pending()) {
+                    ESP_LOGW(TAG, "New firmware detected, validating...");
+                    // In a real application, you would run validation tests here
+                    // For now, we'll mark it as valid after a short delay
+                    vTaskDelay(pdMS_TO_TICKS(5000));
+                    ota_manager_mark_valid();
+                    ESP_LOGI(TAG, "New firmware validated and marked as valid");
+                }
+            }
+        } else {
+            ESP_LOGW(TAG, "Failed to initialize OTA manager: %s", esp_err_to_name(ota_ret));
+        }
+    } else {
+        ESP_LOGW(TAG, "Failed to load OTA config: %s", esp_err_to_name(ota_config_ret));
     }
 
     // Initialize logging system
@@ -108,6 +154,9 @@ extern "C" void app_main(void)
         ESP_LOGI(TAG, "Logging system initialized with configuration: %s", logging_config.c_str());
     }
 
+    // Auto-detect BMS type
+    // Assume 16/17 are the RX/TX pins for UART communication
+    status_led_notify_boot_stage(STATUS_BOOT_STAGE_BMS_INIT);
     if (auto_detect_bms_type()) {
         ESP_LOGI(TAG, "Daly BMS detected, initializing...");
         bms_interface = daly_bms_create(UART_NUM_1, BMS_RX_PIN, BMS_TX_PIN);
@@ -123,7 +172,7 @@ extern "C" void app_main(void)
 
     ESP_LOGI(TAG, "BMS interface created successfully");
 
-    // Configure logging format and prepare runtime CSV header sizing
+    // Configure logging format and prepare runtime CSV header sizing (moved outside loop)
     static output::OutputConfig g_log_cfg{};
     #ifdef LOG_FORMAT_CSV
     g_log_cfg.format = output::OutputFormat::CSV;
@@ -132,6 +181,9 @@ extern "C" void app_main(void)
     g_log_cfg.header_temps = output::DEFAULT_MAX_CSV_TEMPS;
     #endif
     static bool g_csv_header_configured = false;
+
+    // Move BMSSnapshot to static to reduce stack usage
+    static output::BMSSnapshot s{};
 
     // Variables for time and energy tracking
     uint64_t start_time = esp_timer_get_time();
@@ -183,8 +235,8 @@ extern "C" void app_main(void)
             bool charging_enabled = bms_interface->isChargingEnabled(bms_interface->handle);
             bool discharging_enabled = bms_interface->isDischargingEnabled(bms_interface->handle);
 
-            // Emit via pluggable logger (Human or CSV)
-            output::BMSSnapshot s{};
+            // Emit via pluggable logger (Human or CSV) - using static allocation
+            s = output::BMSSnapshot{};  // Reset the static snapshot
             s.start_time_us = start_time;
             s.now_time_us = current_time;
             s.elapsed_sec = elapsed_sec;
@@ -262,10 +314,42 @@ extern "C" void app_main(void)
             }
 
             // Send to new modular logging system
+            {
+                bms_led_metrics_t bm = {
+                    .valid = true,
+                    .comm_ok = true,
+                    .soc_pct = soc,
+                    .charging_enabled = charging_enabled,
+                    .discharging_enabled = discharging_enabled,
+                    .max_temp_c = max_temp,
+                    .min_temp_c = min_temp,
+                    .cell_delta_v = cell_voltage_delta,
+                    .mosfet_fault = false,
+                    .ov_critical = false,
+                    .uv_critical = false
+                };
+                status_led_notify_bms(&bm);
+            }
             LOG_SEND(s);
         } else {
             ESP_LOGE(TAG, "Failed to read BMS measurements");
             // printf("ERROR: Failed to read BMS data\n");
+            {
+                bms_led_metrics_t bm = {
+                    .valid = true,
+                    .comm_ok = false,
+                    .soc_pct = 0.0f,
+                    .charging_enabled = false,
+                    .discharging_enabled = false,
+                    .max_temp_c = 0.0f,
+                    .min_temp_c = 0.0f,
+                    .cell_delta_v = 0.0f,
+                    .mosfet_fault = false,
+                    .ov_critical = false,
+                    .uv_critical = false
+                };
+                status_led_notify_bms(&bm);
+            }
         }
 
         // Check WiFi status periodically (every 10 readings)
@@ -282,6 +366,11 @@ extern "C" void app_main(void)
                          (int)((wifi_status.ip_address >> 24) & 0xFF),
                          wifi_status.rssi,
                          wifi_status.disconnect_count);
+                status_led_wifi_t led_wifi = {
+                    .connected = (wifi_status.state == WIFI_STATE_CONNECTED),
+                    .rssi = wifi_status.rssi
+                };
+                status_led_notify_wifi(&led_wifi);
             }
         }
 

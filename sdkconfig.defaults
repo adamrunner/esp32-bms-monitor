@@ -1,0 +1,20 @@
+# ESP32 BMS Monitor Configuration Defaults
+# This file ensures consistent configuration across builds
+
+# Main task stack size - increased for deep initialization call stack
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=12288
+CONFIG_MAIN_TASK_STACK_SIZE=12288
+
+# WiFi and networking optimizations
+CONFIG_LWIP_MAX_SOCKETS=16
+CONFIG_LWIP_SO_REUSE=y
+
+# SPIFFS configuration for config files
+CONFIG_SPIFFS_MAX_PARTITIONS=3
+
+# Logging configuration
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LOG_MAXIMUM_LEVEL=4
+
+# FreeRTOS optimizations
+CONFIG_FREERTOS_HZ=1000

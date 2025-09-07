@@ -1,0 +1,10 @@
+idf_component_register(
+    SRCS
+        "status_led.cpp"
+        "led_patterns.cpp"
+    INCLUDE_DIRS
+        "include"
+    REQUIRES
+        indicator_pixel
+        freertos
+)

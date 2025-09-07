@@ -24,6 +24,7 @@ idf_component_register(
         fatfs
         sdmmc
         spi_flash
+        status_led
     PRIV_REQUIRES
         nvs_flash
         esp_http_client

@@ -2,7 +2,6 @@
 #define LOG_MANAGER_H
 
 #include "log_sink.h"
-#include "log_serializers.h"
 #include "bms_snapshot.h"
 #include <memory>
 #include <vector>
