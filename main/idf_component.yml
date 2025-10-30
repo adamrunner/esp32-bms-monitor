@@ -3,7 +3,8 @@
 ## and project configuration
 
 dependencies:
-  # Include any component dependencies here if needed
-  
+  wifi_manager:
+    path: ../../esp32-shared-components/wifi_manager
+
 ## Project-specific extensions
 project_include: "tools/project_include.cmake"

@@ -13,8 +13,15 @@ dependencies:
     source:
       type: idf
     version: 5.5.0
+  wifi_manager:
+    dependencies: []
+    source:
+      path: /Users/adamrunner/Code/esp32-shared-components/wifi_manager
+      type: local
+    version: 0.1.0
 direct_dependencies:
 - espressif/led_strip
-manifest_hash: 08f46b3e1e78d453c5935d5d644d066a7930270f88c3b0cec4d412617d8f5ce0
+- wifi_manager
+manifest_hash: 502d2b8e4ae3cc64afb7696b3a7c95b46e7052a27e9319a1491a468374ffb469
 target: esp32c6
 version: 2.0.0
