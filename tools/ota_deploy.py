@@ -25,11 +25,11 @@ except ImportError:
     print("Warning: paho-mqtt not installed. Install with: pip install paho-mqtt")
 
 class OTADeployer:
-    def __init__(self, config_file: str = "ota_deploy_config.json"):
+    def __init__(self, config_file: str = "ota_deploy_config.json", cli_version: str = None):
         self.config = self.load_config(config_file)
         self.mqtt_client = None
         self.mqtt_connected = False
-        self.version_file_created = False
+        self.cli_version = cli_version
 
     def load_config(self, config_file: str) -> Dict[str, Any]:
         """Load deployment configuration"""
@@ -55,8 +55,7 @@ class OTADeployer:
                 "timeout": 30
             },
             "build": {
-                "firmware_path": "build/esp32-bms-monitor.bin",
-                "version_file": "version.txt"
+                "firmware_path": "build/esp32-bms-monitor.bin"
             }
         }
 
@@ -83,31 +82,46 @@ class OTADeployer:
         return merge_configs(default_config, config)
 
     def get_version(self) -> str:
-        """Get version from version file or generate from git"""
-        version_file = self.config["build"]["version_file"]
+        """Get version from CLI args or generate from git"""
+        # 1. Use CLI version if provided
+        if self.cli_version:
+            return self.cli_version
 
-        if os.path.exists(version_file):
-            with open(version_file, 'r') as f:
-                return f.read().strip()
-
-        # Try to get version from git
+        # 2. Try to get version from git
         try:
-            result = subprocess.run(
-                ['git', 'describe', '--tags', '--always', '--dirty'],
+            # Get branch name
+            branch_result = subprocess.run(
+                ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
                 capture_output=True,
                 text=True,
                 check=True
             )
-            version = result.stdout.strip()
+            branch = branch_result.stdout.strip()
 
-            # Save version for future use
-            with open(version_file, 'w') as f:
-                f.write(version)
-            self.version_file_created = True
+            # Get short commit hash
+            commit_result = subprocess.run(
+                ['git', 'rev-parse', '--short', 'HEAD'],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            short_commit = commit_result.stdout.strip()
+
+            version = f"{branch}-{short_commit}"
+
+            # Check for uncommitted changes
+            status_result = subprocess.run(
+                ['git', 'status', '--porcelain', '--untracked-files=no'],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            if status_result.stdout.strip():
+                version += "-dirty"
 
             return version
         except subprocess.CalledProcessError:
-            # Fallback version
+            # 3. Fallback version
             return "1.0.0-dev"
 
     def upload_firmware(self, firmware_path: str, version: str) -> bool:
@@ -447,16 +461,6 @@ class OTADeployer:
             print("\n3. Triggering OTA update...")
             result = self.trigger_ota_update(force_update)
 
-        # Clean up version file if it was created during this run
-        if result and self.version_file_created:
-            version_file = self.config["build"]["version_file"]
-            try:
-                if os.path.exists(version_file):
-                    os.remove(version_file)
-                    print(f"✓ Cleaned up temporary version file: {version_file}")
-            except Exception as e:
-                print(f"Warning: Failed to clean up version file: {e}")
-
         return result
 
 def main():
@@ -471,13 +475,8 @@ def main():
 
     args = parser.parse_args()
 
-    deployer = OTADeployer(args.config)
-
-    # Override version if specified
-    if args.version:
-        with open(deployer.config["build"]["version_file"], 'w') as f:
-            f.write(args.version)
-        deployer.version_file_created = True
+    # Pass version override to constructor
+    deployer = OTADeployer(args.config, args.version)
 
     success = deployer.deploy(args.force, args.check_only)
 

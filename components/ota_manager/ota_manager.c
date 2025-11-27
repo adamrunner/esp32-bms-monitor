@@ -202,17 +202,18 @@ esp_err_t ota_manager_check_update(char* available_version, size_t version_len)
         return ESP_FAIL;
     }
 
-    esp_err_t err = esp_http_client_perform(client);
+    esp_err_t err = esp_http_client_open(client, 0);
     if (err == ESP_OK) {
+        int content_length = esp_http_client_fetch_headers(client);
         int status_code = esp_http_client_get_status_code(client);
-        int content_length = esp_http_client_get_content_length(client);
 
         ESP_LOGI(TAG, "Version check HTTP status: %d, content length: %d", status_code, content_length);
 
-        if (status_code == 200 && content_length > 0) {
-            char* response_buffer = malloc(content_length + 1);
+        if (status_code == 200) {
+            int read_len = content_length > 0 ? content_length : 1024;
+            char* response_buffer = malloc(read_len + 1);
             if (response_buffer) {
-                int data_read = esp_http_client_read_response(client, response_buffer, content_length);
+                int data_read = esp_http_client_read_response(client, response_buffer, read_len);
                 if (data_read > 0) {
                     response_buffer[data_read] = '\0';
                     ESP_LOGI(TAG, "Version check response: %s", response_buffer);

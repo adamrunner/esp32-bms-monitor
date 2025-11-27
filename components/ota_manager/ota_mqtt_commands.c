@@ -305,7 +305,7 @@ static void handle_ota_command(const char* payload, int payload_len)
             // Send status update indicating update is available
             ota_status_progress_callback(OTA_STATUS_IDLE, 0, "Update available");
         } else {
-            ESP_LOGI(TAG, "No update available");
+            ESP_LOGI(TAG, "No update available: %s", available_version);
             ota_status_logger_set_available_version("");
             // Send status update indicating no update is available
             ota_status_progress_callback(OTA_STATUS_IDLE, 0, "No update available");
