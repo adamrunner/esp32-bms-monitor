@@ -17,7 +17,13 @@ if [ ! -f "build/esp32-bms-monitor.bin" ]; then
 fi
 
 # Get version
-VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "1.0.0-dev")
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+SHORT_COMMIT=$(git rev-parse --short HEAD)
+VERSION="${BRANCH}-${SHORT_COMMIT}"
+
+if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+    VERSION="${VERSION}-dirty"
+fi
 echo "Deploying version: $VERSION"
 echo "$NAS_USER@$NAS_IP mkdir -p /var/www/firmware"
 # Create remote directories
