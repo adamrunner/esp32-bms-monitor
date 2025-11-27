@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <cmath>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <driver/uart.h>
@@ -21,7 +22,16 @@
 #include "status_led.h"
 
 static const char *TAG = "bms_monitor";
-static constexpr uint32_t READ_INTERVAL_MS = 10000;
+static constexpr uint32_t INTERVAL_IDLE_MS = 10000;
+static constexpr uint32_t INTERVAL_ACTIVE_MS = 1000;
+static constexpr float THRESHOLD_CURRENT_A = 0.5f;
+static constexpr float THRESHOLD_POWER_W = 10.0f;
+static constexpr uint32_t NOTIFY_READ_BMS = 0x01;
+
+// Global state
+static TaskHandle_t g_main_task_handle = NULL;
+static esp_timer_handle_t g_periodic_timer = NULL;
+static volatile uint32_t g_current_interval_ms = INTERVAL_IDLE_MS;
 
 // BMS instances
 static bms_interface_t* bms_interface = NULL;
@@ -37,12 +47,32 @@ static bool auto_detect_bms_type() {
     return false; // Assume JBD BMS for now
 }
 
+static void periodic_timer_callback(void* arg) {
+    if (g_main_task_handle) {
+        xTaskNotify(g_main_task_handle, NOTIFY_READ_BMS, eSetBits);
+    }
+}
+
+static void update_polling_rate(uint32_t new_interval_ms) {
+    if (new_interval_ms != g_current_interval_ms) {
+        if (g_periodic_timer) {
+            esp_timer_stop(g_periodic_timer);
+            esp_timer_start_periodic(g_periodic_timer, new_interval_ms * 1000);
+        }
+        g_current_interval_ms = new_interval_ms;
+        status_led_set_tick_period_ms(new_interval_ms);
+        ESP_LOGI(TAG, "Polling rate updated to %lu ms", new_interval_ms);
+    }
+}
+
 extern "C" void app_main(void)
 {
+    g_main_task_handle = xTaskGetCurrentTaskHandle();
+
     ESP_LOGI(TAG, "Starting BMS Monitor Application");
     status_led_config_t led_cfg = { .enabled = true, .gpio_pin = 8, .brightness = 64, .boot_animation = true, .critical_override = true, .overlay_enabled = false, .overlay_period_ms = 0, .overlay_on_ms = 0 };
     (void)status_led_init(&led_cfg);
-    status_led_set_tick_period_ms(READ_INTERVAL_MS);
+    status_led_set_tick_period_ms(INTERVAL_IDLE_MS);
     status_led_notify_boot_stage(STATUS_BOOT_STAGE_BOOT);
 
     // Initialize WiFi manager
@@ -172,6 +202,18 @@ extern "C" void app_main(void)
 
     ESP_LOGI(TAG, "BMS interface created successfully");
 
+    // Initialize the polling timer
+    const esp_timer_create_args_t periodic_timer_args = {
+        .callback = &periodic_timer_callback,
+        .name = "bms_periodic"
+    };
+    ESP_ERROR_CHECK(esp_timer_create(&periodic_timer_args, &g_periodic_timer));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(g_periodic_timer, INTERVAL_IDLE_MS * 1000));
+    ESP_LOGI(TAG, "Started polling timer at %lu ms", INTERVAL_IDLE_MS);
+
+    // Trigger initial read
+    xTaskNotify(g_main_task_handle, NOTIFY_READ_BMS, eSetBits);
+
     // Configure logging format and prepare runtime CSV header sizing (moved outside loop)
     static output::OutputConfig g_log_cfg{};
     #ifdef LOG_FORMAT_CSV
@@ -191,7 +233,15 @@ extern "C" void app_main(void)
     double total_energy_wh = 0.0;
 
     // Main monitoring loop
+    uint32_t notified_value;
     while (1) {
+        // Wait for notification
+        xTaskNotifyWait(0, ULONG_MAX, &notified_value, portMAX_DELAY);
+
+        if (!(notified_value & NOTIFY_READ_BMS)) {
+            continue;
+        }
+
         // Read all BMS measurements
         if (bms_interface->readMeasurements(bms_interface->handle)) {
             // Get basic measurements
@@ -331,6 +381,11 @@ extern "C" void app_main(void)
                 status_led_notify_bms(&bm);
             }
             LOG_SEND(s);
+
+            // Adaptive polling logic
+            bool is_active = (std::abs(current) > THRESHOLD_CURRENT_A) || (std::abs(power) > THRESHOLD_POWER_W);
+            update_polling_rate(is_active ? INTERVAL_ACTIVE_MS : INTERVAL_IDLE_MS);
+
         } else {
             ESP_LOGE(TAG, "Failed to read BMS measurements");
             // printf("ERROR: Failed to read BMS data\n");
@@ -374,10 +429,12 @@ extern "C" void app_main(void)
             }
         }
 
-        // Wait before next reading
-        vTaskDelay(pdMS_TO_TICKS(READ_INTERVAL_MS));
     }
 
     // Cleanup
     LOG_SHUTDOWN();
+    if (g_periodic_timer) {
+        esp_timer_stop(g_periodic_timer);
+        esp_timer_delete(g_periodic_timer);
+    }
 }
