@@ -40,7 +40,7 @@ fi
 
 # Build the SPIFFS image
 echo "Building SPIFFS image..."
-if ! python "$IDF_PATH/components/spiffs/spiffsgen.py" 0x100000 data build/storage.bin; then
+if ! python "$IDF_PATH/components/spiffs/spiffsgen.py" 0x80000 data build/storage.bin; then
     echo "Error: Failed to build SPIFFS image. Check your data directory and permissions."
     exit 1
 fi
@@ -61,7 +61,7 @@ echo "SPIFFS image built successfully: build/storage.bin ($(stat -f%z build/stor
 
 # Flash the SPIFFS image
 echo "Flashing SPIFFS image to port $PORT at baud rate $BAUD..."
-if ! esptool.py --chip esp32c6 --port "$PORT" --baud "$BAUD" write_flash 0x210000 build/storage.bin; then
+if ! esptool.py --chip esp32c6 --port "$PORT" --baud "$BAUD" write_flash 0x420000 build/storage.bin; then
     echo "Error: Failed to flash SPIFFS image. Check your connection and port settings."
     echo "Common issues:"
     echo "  - Device not connected or wrong port"

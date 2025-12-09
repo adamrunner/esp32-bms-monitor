@@ -8,8 +8,8 @@ source /Users/adamrunner/esp/v5.5/esp-idf/export.sh
 # Define variables
 PROJECT_DIR="/Users/adamrunner/Code/esp32-bms-monitor"
 BUILD_DIR="$PROJECT_DIR/build"
-SPIFFS_SIZE="0xc0000"  # 768KB as defined in partitions.csv
-SPIFFS_ADDRESS="0x320000"  # Address of storage partition as defined in partitions.csv
+SPIFFS_SIZE="0x80000"  # 512KB as defined in partitions.csv
+SPIFFS_ADDRESS="0x420000"  # Address of storage partition as defined in partitions.csv
 DATA_DIR="$PROJECT_DIR/data"
 
 echo "ESP32 BMS Monitor SPIFFS Image Builder and Flasher"
