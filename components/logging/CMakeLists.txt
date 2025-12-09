@@ -25,6 +25,7 @@ idf_component_register(
         sdmmc
         spi_flash
         status_led
+        device_id
     PRIV_REQUIRES
         nvs_flash
         esp_http_client

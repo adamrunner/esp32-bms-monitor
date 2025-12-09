@@ -31,6 +31,9 @@ struct OutputConfig
 
 struct BMSSnapshot
 {
+    // Unique device identifier (alphanumeric, hyphen, underscore; max 32 chars)
+    char device_id[33] { 0 };
+
     uint64_t start_time_us { 0 };
     uint64_t now_time_us { 0 };
     unsigned elapsed_sec { 0 };

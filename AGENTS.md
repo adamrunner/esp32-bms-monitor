@@ -41,19 +41,34 @@ Project Structure
 - components/: Reusable components with their own CMakeLists.txt
   - daly_bms/: Daly BMS driver (C interface)
   - jbd_bms/: JBD BMS driver (C interface)
+  - device_id/: Device identification system (eFUSE MAC or custom ID)
   - logging/: Modular logging system with multiple sinks and serializers
   - wifi_manager/: WiFi connection management with credential storage
-- data/: Configuration files flashed to SPIFFS (wifi_config.txt, mqtt_config.txt)
+- data/: Configuration files flashed to SPIFFS (wifi_config.txt, mqtt_config.txt, device_config.txt)
 - examples/: Reference implementations and protocol documentation
+
+Device Identification
+- Each ESP32 device has a unique device_id included in all telemetry data
+- Device ID sources (priority order):
+  1. Custom ID from /spiffs/device_config.txt (e.g., "solar-bms-1")
+  2. ESP32 chip eFUSE MAC address (format: "bms-A1B2C3D4E5F6")
+- Device ID requirements: alphanumeric, hyphen, underscore; max 32 chars
+- Device ID is included in all serialized output (JSON, CSV) as the first field
+- MQTT client ID automatically uses device_id for unique identification
+- Component location: components/device_id/
 
 Logging System
 - Use LOG_INIT(), LOG_SEND(), LOG_SHUTDOWN() macros from log_manager.h
 - Configure logging via JSON string with multiple sinks (serial, mqtt, tcp, udp, http)
 - Serializers support multiple formats (JSON, CSV, XML, human-readable)
 - BMS data uses BMSSnapshot struct from bms_snapshot.h
+- All telemetry includes device_id as first field for multi-BMS deployments
 
 WiFi and Connectivity
 - WiFi credentials managed via wifi_manager component
 - Configuration stored in SPIFFS (/spiffs/wifi_config.txt)
 - MQTT support through logging system
+  - Device-specific topics: bms/telemetry/{device_id} (configurable via use_device_topic)
+  - Wildcard subscription for all devices: bms/telemetry/#
+  - Legacy single-topic mode available (use_device_topic=false)
 - SNTP time synchronization for real timestamps

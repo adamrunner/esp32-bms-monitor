@@ -8,6 +8,7 @@
 #include <esp_system.h>
 #include <esp_mac.h>
 #include "status_led.h"
+#include "device_id.h"
 
 using namespace logging;
 
@@ -37,6 +38,21 @@ bool MQTTLogSink::init(const std::string& config) {
     if (!parseConfig(config)) {
         setLastError("Failed to parse configuration");
         return false;
+    }
+
+    // Construct full topic with device_id if enabled
+    if (config_.use_device_topic) {
+        char device_id_buf[33];
+        if (device_id_get(device_id_buf, sizeof(device_id_buf)) == ESP_OK) {
+            full_topic_ = config_.topic + "/" + std::string(device_id_buf);
+            ESP_LOGI(TAG, "Using device-specific MQTT topic: %s", full_topic_.c_str());
+        } else {
+            ESP_LOGW(TAG, "Failed to get device_id, using base topic only");
+            full_topic_ = config_.topic;
+        }
+    } else {
+        full_topic_ = config_.topic;
+        ESP_LOGI(TAG, "Using base MQTT topic: %s", full_topic_.c_str());
     }
 
     // Create appropriate serializer
@@ -71,7 +87,7 @@ bool MQTTLogSink::send(const output::BMSSnapshot& data) {
 
     // Publish message
     int msg_id = esp_mqtt_client_publish(mqtt_client_,
-                                       config_.topic.c_str(),
+                                       full_topic_.c_str(),
                                        serialized.c_str(),
                                        serialized.length(),
                                        config_.qos,
@@ -89,7 +105,7 @@ bool MQTTLogSink::send(const output::BMSSnapshot& data) {
     status_led_notify_net_telemetry_tx();
 
     ESP_LOGD(TAG, "Published MQTT message (ID: %d, %zu bytes) to topic: %s",
-             msg_id, serialized.length(), config_.topic.c_str());
+             msg_id, serialized.length(), full_topic_.c_str());
 
     return true;
 }
@@ -233,6 +249,7 @@ bool MQTTLogSink::parseConfig(const std::string& config_str) {
                 }
             }
             else if (key == "topic") config_.topic = value;
+            else if (key == "use_device_topic") config_.use_device_topic = (value == "true");
             else if (key == "format") config_.format = value;
             else if (key == "qos") {
                 config_.qos = atoi(value.c_str());
@@ -317,6 +334,9 @@ bool MQTTLogSink::loadSpiffsConfig() {
                 }
             }
             else if (strcmp(key, "topic") == 0) config_.topic = value;
+            else if (strcmp(key, "use_device_topic") == 0) {
+                config_.use_device_topic = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
+            }
             else if (strcmp(key, "username") == 0) config_.username = value;
             else if (strcmp(key, "password") == 0) config_.password = value;
             else if (strcmp(key, "qos") == 0) {
@@ -421,6 +441,15 @@ void MQTTLogSink::disconnectMQTT() {
 }
 
 std::string MQTTLogSink::generateMacBasedClientId() {
+    // Try to get device_id from device_id component first
+    char device_id_buf[33];
+    if (device_id_get(device_id_buf, sizeof(device_id_buf)) == ESP_OK) {
+        ESP_LOGD(TAG, "Using device_id for MQTT client ID: %s", device_id_buf);
+        return std::string(device_id_buf);
+    }
+
+    // Fallback to MAC address if device_id not available
+    ESP_LOGW(TAG, "device_id not available, falling back to MAC-based client ID");
     uint8_t mac[6] = {0};
     esp_err_t err = esp_read_mac(mac, ESP_MAC_WIFI_STA);
     if (err != ESP_OK) {

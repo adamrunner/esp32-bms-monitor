@@ -20,6 +20,7 @@
 #define BMS_TX_PIN 5
 #include "wifi_manager.h"
 #include "status_led.h"
+#include "device_id.h"
 
 static const char *TAG = "bms_monitor";
 static constexpr uint32_t INTERVAL_IDLE_MS = 10000;
@@ -168,6 +169,17 @@ extern "C" void app_main(void)
         ESP_LOGW(TAG, "Failed to load OTA config: %s", esp_err_to_name(ota_config_ret));
     }
 
+    // Initialize device ID subsystem
+    ESP_LOGI(TAG, "Initializing device ID...");
+    if (device_id_init() != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize device ID");
+    } else {
+        char device_id_buf[33];
+        if (device_id_get(device_id_buf, sizeof(device_id_buf)) == ESP_OK) {
+            ESP_LOGI(TAG, "Device ID: %s", device_id_buf);
+        }
+    }
+
     // Initialize logging system
     ESP_LOGI(TAG, "Initializing logging manager...");
     std::string logging_config = R"({"sinks":[
@@ -287,6 +299,12 @@ extern "C" void app_main(void)
 
             // Emit via pluggable logger (Human or CSV) - using static allocation
             s = output::BMSSnapshot{};  // Reset the static snapshot
+
+            // Set device ID
+            if (device_id_get(s.device_id, sizeof(s.device_id)) != ESP_OK) {
+                snprintf(s.device_id, sizeof(s.device_id), "unknown");
+            }
+
             s.start_time_us = start_time;
             s.now_time_us = current_time;
             s.elapsed_sec = elapsed_sec;

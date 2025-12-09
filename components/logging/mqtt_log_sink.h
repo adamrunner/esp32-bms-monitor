@@ -37,6 +37,7 @@ private:
         std::string broker_host = "localhost";
         int broker_port = 1883;
         std::string topic = "bms/telemetry";
+        bool use_device_topic = true;  // Append device_id to topic
         std::string format = "csv";
         int qos = 0;
         bool retain = false;
@@ -47,6 +48,8 @@ private:
         bool clean_session = true;
         int connect_timeout_ms = 5000;
     } config_;
+
+    std::string full_topic_;  // Constructed topic with device_id if enabled
 
     bool parseConfig(const std::string& config_str);
     bool loadSpiffsConfig();

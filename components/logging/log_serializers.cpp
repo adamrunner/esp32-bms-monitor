@@ -47,6 +47,7 @@ public:
         json << std::fixed << std::setprecision(3);
 
         json << "{\n";
+        json << "  \"device_id\": \"" << data.device_id << "\",\n";
         json << "  \"timestamp\": " << data.now_time_us << ",\n";
         json << "  \"elapsed_seconds\": " << data.elapsed_sec << ",\n";
         json << "  \"elapsed_hms\": \"" << data.hours << ":"
@@ -146,7 +147,8 @@ public:
 
         char buffer[1024];
         int len = snprintf(buffer, sizeof(buffer),
-            "%lld,%u,%02u:%02u:%02u,%.3f,%.2f,%.2f,%.1f,%.2f,%.2f,%.2f,%.2f,%d,%.3f,%d,%.3f,%d,%.3f,%d,%.1f,%.1f,%d,%d",
+            "%s,%lld,%u,%02u:%02u:%02u,%.3f,%.2f,%.2f,%.1f,%.2f,%.2f,%.2f,%.2f,%d,%.3f,%d,%.3f,%d,%.3f,%d,%.1f,%.1f,%d,%d",
+            data.device_id,
             (long long)data.real_timestamp,
             data.elapsed_sec, data.hours, data.minutes, data.seconds,
             data.total_energy_wh,
@@ -183,7 +185,7 @@ public:
     }
 
     std::string getHeader() const override {
-        std::string header = "timestamp,elapsed_sec,hours:minutes:seconds,total_energy_wh,pack_voltage_v,pack_current_a,soc_pct,power_w,full_capacity_ah,peak_current_a,peak_power_w,cell_count,min_cell_voltage_v,min_cell_num,max_cell_voltage_v,max_cell_num,cell_voltage_delta_v,temp_count,min_temp_c,max_temp_c,charging_enabled,discharging_enabled";
+        std::string header = "device_id,timestamp,elapsed_sec,hours:minutes:seconds,total_energy_wh,pack_voltage_v,pack_current_a,soc_pct,power_w,full_capacity_ah,peak_current_a,peak_power_w,cell_count,min_cell_voltage_v,min_cell_num,max_cell_voltage_v,max_cell_num,cell_voltage_delta_v,temp_count,min_temp_c,max_temp_c,charging_enabled,discharging_enabled";
         
         // Add cell voltage headers
         for (int i = 0; i < cfg_.header_cells; ++i) {
