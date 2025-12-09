@@ -184,7 +184,7 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "Initializing logging manager...");
     std::string logging_config = R"({"sinks":[
         {"type":"serial","config":{"format":"csv","print_header":true,"max_cells":4,"max_temps":3}},
-        {"type":"mqtt","config":{"format":"csv","topic":"bms/telemetry","qos":1}},
+        {"type":"mqtt","config":{"format":"csv","use_device_topic": true,"qos":1}},
         {"type":"sdcard","config":{"file_prefix":"bms_data","buffer_size":32768,"flush_interval_ms":120000,"fsync_interval_ms":60000,"max_lines_per_file":10000,"enable_free_space_check":true,"min_free_space_mb":10,"spi":{"mosi_pin":23,"miso_pin":19,"clk_pin":18,"cs_pin":22,"freq_khz":10000}}}
     ]})";
 
